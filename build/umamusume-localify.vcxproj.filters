@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="dllproxy">
+      <UniqueIdentifier>{035B1443-EF27-6F4E-1841-5DF6046DA4DC}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="il2cpp">
+      <UniqueIdentifier>{2F248C04-1BC6-B6DA-0481-CA2EF0C13D2B}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="local">
+      <UniqueIdentifier>{B0E6DF0F-1CFB-07C1-E57C-AB20515004F2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="logger">
+      <UniqueIdentifier>{4507DF0B-31A9-09E2-1A64-1D3606A59032}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\src\il2cpp\il2cpp_symbols.hpp">
+      <Filter>il2cpp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\local\local.hpp">
+      <Filter>local</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\logger\logger.hpp">
+      <Filter>logger</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\stdinclude.hpp" />
+    <ClInclude Include="..\src\happyhttp.h" />
+    <ClInclude Include="..\src\httplib.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\console.cpp" />
+    <ClCompile Include="..\src\dllproxy\proxy.cpp">
+      <Filter>dllproxy</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\hook.cpp" />
+    <ClCompile Include="..\src\il2cpp\il2cpp_symbols.cpp">
+      <Filter>il2cpp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\local\local.cpp">
+      <Filter>local</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\logger\logger.cpp">
+      <Filter>logger</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\main.cpp" />
+    <ClCompile Include="..\src\happyhttp.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\src\dllproxy\version.def">
+      <Filter>dllproxy</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Masm Include="..\src\dllproxy\version.asm">
+      <Filter>dllproxy</Filter>
+    </Masm>
+  </ItemGroup>
+</Project>
