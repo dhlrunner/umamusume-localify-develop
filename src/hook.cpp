@@ -2,13 +2,10 @@
 #define _CRT_SECURE_NO_WARNINGS 1
 
 #include <stdinclude.hpp>
-#include <happyhttp.h>
-#include <httplib.h>
 
 bool g_sendserver = true;
 int server_port = 80;
 char server_ip[256];
-char anotherprgname[256];
 DWORD getCurrentDisplayHz();
 
 #pragma comment(lib, "ws2_32")
@@ -18,8 +15,6 @@ using namespace std;
 namespace
 {
 	bool isLiveStartFlag = false;
-	char* editedMsgpack;
-	FILE* temp;
 	int count = 0;
 	char* readAllFileBytes(const char* name)
 	{
@@ -55,37 +50,7 @@ namespace
 		in arr1[] */
 		return 1;
 	}
-	void OnBegin(const happyhttp::Response* r, void* userdata)
-	{
-		printf("BEGIN (%d %s)\n", r->getstatus(), r->getreason());
-		count = 0;
-	}
-
-	void OnData(const happyhttp::Response* r, void* userdata, const unsigned char* data, int n)
-	{
-		fwrite(data, 1, n, stdout);
-		count += n;
-	}
-
-	void OnComplete(const happyhttp::Response* r, void* userdata)
-	{
-		printf("COMPLETE (%d bytes)\n", count);
-	}
-	void OnCompleteAtLive(const happyhttp::Response* r, void* userdata)
-	{
-		
-		//memcpy(editedMsgpack, userdata, count);
-		fclose(temp);
-		editedMsgpack = readAllFileBytes("temp.bin");
-		//editedMsgpack = readAllFileBytes("temp.bin");
-		printf("LIVE DATA SEND/RECIEVE COMPLETE (%d )\n", count);
-	}
-	void OnLiveData(const happyhttp::Response* r, void* userdata, const unsigned char* data, int n)
-	{
-		
-		fwrite(data, 1, n, temp);
-		count += n;
-	}
+	
 	void path_game_assembly();
 	void bootstrap_carrot_juicer();
 
@@ -633,16 +598,17 @@ namespace
 		int dstCapacity)
 	{
 		//printf("compressedSize=%d,dstCapacity=%d", compressedSize, dstCapacity);
-		char* decrypted = new char[dstCapacity]{};
+		char* decrypted = NULL;
 		//server_ip;
 		int ret = 0;
 		
 		if (g_lz4Encrypt) {
+			decrypted = new char[dstCapacity] {};
 			ret = reinterpret_cast<decltype(LZ4_decompress_safe_ext_hook)*>(LZ4_decompress_safe_ext_orig)(
 				src, decrypted, compressedSize, dstCapacity);
 		}
 		else {
-			
+			decrypted = new char[compressedSize];
 			/*
 			z_stream infstream;
 			infstream.zalloc = Z_NULL;
@@ -748,8 +714,10 @@ namespace
 			auto out_path = std::string("CarrotJuicer\\").append(current_time()).append("Q.msgpack");
 			//write_file(out_path, src, srcSize);
 			//printf("wrote clinet request to %s\n", out_path.c_str());
+			delete[] raw_data;
 			return ret;
 		}
+
 		
 	}
 	void bootstrap_carrot_juicer()

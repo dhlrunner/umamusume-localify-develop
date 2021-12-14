@@ -25,7 +25,6 @@
       <Filter>logger</Filter>
     </ClInclude>
     <ClInclude Include="..\src\stdinclude.hpp" />
-    <ClInclude Include="..\src\happyhttp.h" />
     <ClInclude Include="..\src\httplib.h" />
   </ItemGroup>
   <ItemGroup>
@@ -44,7 +43,6 @@
       <Filter>logger</Filter>
     </ClCompile>
     <ClCompile Include="..\src\main.cpp" />
-    <ClCompile Include="..\src\happyhttp.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\src\dllproxy\version.def">

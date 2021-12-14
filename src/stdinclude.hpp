@@ -29,6 +29,8 @@
 #include "local/local.hpp"
 #include "logger/logger.hpp"
 
+#include <httplib.h>
+
 extern bool g_dump_entries;
 extern bool g_enable_logger;
 extern bool g_enable_console;

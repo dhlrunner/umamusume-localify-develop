@@ -103,7 +103,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="..\src\happyhttp.h" />
     <ClInclude Include="..\src\httplib.h" />
     <ClInclude Include="..\src\il2cpp\il2cpp_symbols.hpp" />
     <ClInclude Include="..\src\local\local.hpp" />
@@ -113,7 +112,6 @@
   <ItemGroup>
     <ClCompile Include="..\src\console.cpp" />
     <ClCompile Include="..\src\dllproxy\proxy.cpp" />
-    <ClCompile Include="..\src\happyhttp.cpp" />
     <ClCompile Include="..\src\hook.cpp" />
     <ClCompile Include="..\src\il2cpp\il2cpp_symbols.cpp" />
     <ClCompile Include="..\src\local\local.cpp" />
