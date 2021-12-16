@@ -13,6 +13,9 @@
     <Filter Include="logger">
       <UniqueIdentifier>{4507DF0B-31A9-09E2-1A64-1D3606A59032}</UniqueIdentifier>
     </Filter>
+    <Filter Include="lz4">
+      <UniqueIdentifier>{5bfa2261-6f87-412a-9e8f-7d9830936e66}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\il2cpp\il2cpp_symbols.hpp">
@@ -26,6 +29,21 @@
     </ClInclude>
     <ClInclude Include="..\src\stdinclude.hpp" />
     <ClInclude Include="..\src\httplib.h" />
+    <ClInclude Include="..\src\lz4\lz4.h">
+      <Filter>lz4</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\lz4\lz4frame.h">
+      <Filter>lz4</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\lz4\lz4frame_static.h">
+      <Filter>lz4</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\lz4\lz4hc.h">
+      <Filter>lz4</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\lz4\xxhash.h">
+      <Filter>lz4</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\console.cpp" />
@@ -43,6 +61,18 @@
       <Filter>logger</Filter>
     </ClCompile>
     <ClCompile Include="..\src\main.cpp" />
+    <ClCompile Include="..\src\lz4\lz4.c">
+      <Filter>lz4</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\lz4\lz4frame.c">
+      <Filter>lz4</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\lz4\lz4hc.c">
+      <Filter>lz4</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\lz4\xxhash.c">
+      <Filter>lz4</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\src\dllproxy\version.def">

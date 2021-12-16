@@ -22,7 +22,7 @@
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>NotSet</CharacterSet>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
@@ -61,7 +61,7 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>TurnOffAllWarnings</WarningLevel>
-      <AdditionalIncludeDirectories>..\src;src;..\deps\minhook\include;..\deps\rapidjson\include;..\deps\msgpack\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\dhl\Desktop\My files\code\umamusume-localify-develop\src\lz4;..\src;src;..\deps\minhook\include;..\deps\rapidjson\include;..\deps\msgpack\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <MinimalRebuild>false</MinimalRebuild>
@@ -107,6 +107,11 @@
     <ClInclude Include="..\src\il2cpp\il2cpp_symbols.hpp" />
     <ClInclude Include="..\src\local\local.hpp" />
     <ClInclude Include="..\src\logger\logger.hpp" />
+    <ClInclude Include="..\src\lz4\lz4.h" />
+    <ClInclude Include="..\src\lz4\lz4frame.h" />
+    <ClInclude Include="..\src\lz4\lz4frame_static.h" />
+    <ClInclude Include="..\src\lz4\lz4hc.h" />
+    <ClInclude Include="..\src\lz4\xxhash.h" />
     <ClInclude Include="..\src\stdinclude.hpp" />
   </ItemGroup>
   <ItemGroup>
@@ -116,6 +121,10 @@
     <ClCompile Include="..\src\il2cpp\il2cpp_symbols.cpp" />
     <ClCompile Include="..\src\local\local.cpp" />
     <ClCompile Include="..\src\logger\logger.cpp" />
+    <ClCompile Include="..\src\lz4\lz4.c" />
+    <ClCompile Include="..\src\lz4\lz4frame.c" />
+    <ClCompile Include="..\src\lz4\lz4hc.c" />
+    <ClCompile Include="..\src\lz4\xxhash.c" />
     <ClCompile Include="..\src\main.cpp" />
   </ItemGroup>
   <ItemGroup>
