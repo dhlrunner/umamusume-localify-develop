@@ -131,7 +131,8 @@ namespace
 		{
 			text_queries.emplace(_this, true);
 		}
-
+		//wprintf(L"SQL_Query[ %s ]\n", ssql.c_str());
+		//printf("Text: %s\n", text_queries[0]);
 		return reinterpret_cast<decltype(query_ctor_hook)*>(query_ctor_orig)(_this, conn, sql);
 	}
 
@@ -151,7 +152,7 @@ namespace
 
 		if (text_queries.contains(_this))
 			return local::get_localized_string(result);
-
+		
 		return result;
 	}
 
@@ -173,6 +174,62 @@ namespace
 	void set_animefps_hook(float val)
 	{
 		return reinterpret_cast<decltype(set_animefps_hook)*>(set_animefps_orig)(0.0);
+	}
+
+	
+
+	
+	void* live_CameraLookAt_UpdateCamera_orig = nullptr;
+	void live_CameraLookAt_UpdateCamera_hook() {
+		printf("UpdateCamera Called\n");
+		//return reinterpret_cast<decltype(live_CameraLookAt_UpdateCamera_hook)*>(live_CameraLookAt_UpdateCamera_orig)();
+	}
+
+	void* live_Cutt_LiveTimelineControl_GetCameraPos_orig = nullptr;
+	Vector3_t* live_Cutt_LiveTimelineControl_GetCameraPos_hook(int index) {
+		auto pos = reinterpret_cast<decltype(live_Cutt_LiveTimelineControl_GetCameraPos_hook)*>(live_Cutt_LiveTimelineControl_GetCameraPos_orig)(index);
+		printf("Charaid: %d, Cam: x=%.2f, y=%.2f, z=%.2f\n", index, pos->x, pos->y, pos->z);
+		return pos;
+	}
+
+	void* live_Cutt_LiveTimelineControl_set_liveStageCenterPos_orig = nullptr;
+	void live_Cutt_LiveTimelineControl_set_liveStageCenterPos_hook(Vector3_t* value) {
+		printf("set_liveStageCenterPos: x=%.2f, y=%.2f, z=%.2f\n", value->x, value->y, value->z);
+		return reinterpret_cast<decltype(live_Cutt_LiveTimelineControl_set_liveStageCenterPos_hook)*>
+			(live_Cutt_LiveTimelineControl_set_liveStageCenterPos_orig)(value);
+	}
+
+	void* live_cam_GetCullingMask_orig = nullptr;
+	unsigned int live_cam_GetCullingMask_hook(unsigned int val) {
+		//printf("cam %d\n", val);		
+		return reinterpret_cast<decltype(live_cam_GetCullingMask_hook)*>(live_cam_GetCullingMask_orig)(val);
+		//return 511;
+	}
+
+	void* AssetBundleHelper_GetResourceVer_orig = nullptr;
+	Il2CppString* AssetBundleHelper_GetResourceVer_hook() {
+		auto str = reinterpret_cast<decltype(AssetBundleHelper_GetResourceVer_hook)*>
+			(AssetBundleHelper_GetResourceVer_orig)();
+		std::wstring verstr = std::wstring(str->start_char);
+		wprintf(L"Version Str:[%s]\n",verstr.c_str());
+
+		char* conv_str = new char[str->length + 2];
+		memset(conv_str, 0, str->length + 2);
+		wcstombs(conv_str, verstr.c_str(), str->length + 1);
+		
+
+		httplib::Client cli("127.0.0.1", 564);
+		std::string data(conv_str, str->length + 2);
+		
+		auto res = cli.Post("/umamusume_test_server/tool/upload_resourcever", data, "application/text");
+
+		delete[] conv_str;
+		//res->status;
+		//const char* returned = res->body.c_str();
+		//size_t clength = res->body.length();
+
+		//wprintf()
+		return str;
 	}
 
 	bool (*is_virt)() = nullptr;
@@ -242,7 +299,7 @@ namespace
 
 		return size;
 	}
-
+	
 	void* get_hori_size_orig = nullptr;
 	Vector3_t* get_hori_size_hook(Vector3_t* pVec3, int width, int height)
 	{
@@ -529,6 +586,34 @@ namespace
 			"UnityEngine.CoreModule.dll", "UnityEngine",
 			"Screen", "SetResolution", 3
 		);
+
+		auto live_cam_GetCullingMask_addr = reinterpret_cast<unsigned int(*)(unsigned int)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop.Live.Cutt",
+				"LiveCameraCullingLayer_Helper", "GetCullingMask", 1
+			));
+		
+		auto live_CameraLookAt_UpdateCamera_addr = reinterpret_cast<void(*)(void)>(
+			il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live",
+			"CameraLookAt", "UpdateCamera", 0
+		));
+
+		auto live_Cutt_LiveTimelineControl_GetCameraPos_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "GetCameraPos", 1
+		);
+
+		auto live_Cutt_LiveTimelineControl_set_liveStageCenterPos_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "set_liveStageCenterPos", 1
+		);
+
+		auto AssetBundleHelper_GetResourceVer_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"AssetBundleHelper", "GetResourceVer", 0
+		);
+
 #pragma endregion
 
 		// hook UnityEngine.TextGenerator::PopulateWithErrors to modify text
@@ -541,6 +626,11 @@ namespace
 		ADD_HOOK(query_getstr, "Query::GetString at %p\n");
 		ADD_HOOK(query_dispose, "Query::Dispose at %p\n");
 		ADD_HOOK(set_animefps, "UnityEngine.AnimationClip.set_frameRate at %p \n");
+		ADD_HOOK(live_cam_GetCullingMask, "Gallop.Live.Cutt.LiveCameraCullingLayer_Helper.GetCullingMask(uint) at %p\n");
+		//ADD_HOOK(live_CameraLookAt_UpdateCamera, "Gallop.Live.CameraLookAt.UpdateCamera(longlong) at %p \n");
+		ADD_HOOK(live_Cutt_LiveTimelineControl_GetCameraPos, "Gallop.Live.Cutt.LiveTimelineControl.GetCameraPos(int) at %p\n");
+		ADD_HOOK(live_Cutt_LiveTimelineControl_set_liveStageCenterPos, "Gallop.Live.Cutt.LiveTimelineControl.set_liveStageCenterPos(Vector3) at %p\n");
+		ADD_HOOK(AssetBundleHelper_GetResourceVer, "Gallop.AssetBundleHelper.GetResourceVer() at %p\n");
 		if (g_replace_font)
 		{
 			ADD_HOOK(on_populate, "Gallop.TextCommon::OnPopulateMesh at %p\n");
@@ -849,5 +939,7 @@ DWORD getCurrentDisplayHz() {
 	devmode.dmSize = sizeof(DEVMODE);
 	devmode.dmFields = DM_DISPLAYFREQUENCY;
 	EnumDisplaySettings(NULL, ENUM_CURRENT_SETTINGS, &devmode);
+
+	//free(&devmode);
 	return devmode.dmDisplayFrequency;
 }
