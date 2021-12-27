@@ -28,8 +28,10 @@
 #include "il2cpp/il2cpp_symbols.hpp"
 #include "local/local.hpp"
 #include "logger/logger.hpp"
+#include "PEDump.h"
 
 #include <httplib.h>
+#include <psapi.h>
 
 #include "lz4.h"
 

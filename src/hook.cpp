@@ -85,9 +85,19 @@ namespace
 	void* load_library_w_orig = nullptr;
 	HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 	{
+		
 		// GameAssembly.dll code must be loaded and decrypted while loading criware library
 		if (path == L"cri_ware_unity.dll"s)
 		{
+			//GameAssembly ดýวม
+			HMODULE ga = GetModuleHandle("GameAssembly.dll");
+			if (ga != nullptr) {
+				//std::string exe_name = module_filename(NULL);
+				printf("Trying to dump GameAssembly.dll...\n");
+				pedump(ga, "dumped_GameAssembly.dll");
+			}
+			ga = nullptr;
+
 			path_game_assembly();
 			bootstrap_carrot_juicer();
 			MH_DisableHook(LoadLibraryW);
@@ -95,6 +105,7 @@ namespace
 
 			// use original function beacuse we have unhooked that
 			return LoadLibraryW(path);
+			//GetModuleHandle()
 		}
 
 		return reinterpret_cast<decltype(LoadLibraryW)*>(load_library_w_orig)(path);

@@ -61,13 +61,13 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>TurnOffAllWarnings</WarningLevel>
-      <AdditionalIncludeDirectories>C:\Users\dhl\Desktop\My files\code\umamusume-localify-develop\src\lz4;..\src;src;..\deps\minhook\include;..\deps\rapidjson\include;..\deps\msgpack\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <MinimalRebuild>false</MinimalRebuild>
-      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/std:c++latest %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>..\src\PEDump\;..\src\lz4;..\src\;..\deps\rapidjson\include;..\deps\minhook\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -112,6 +112,7 @@
     <ClInclude Include="..\src\lz4\lz4frame_static.h" />
     <ClInclude Include="..\src\lz4\lz4hc.h" />
     <ClInclude Include="..\src\lz4\xxhash.h" />
+    <ClInclude Include="..\src\PEDump\PEDump.h" />
     <ClInclude Include="..\src\stdinclude.hpp" />
   </ItemGroup>
   <ItemGroup>
@@ -126,6 +127,7 @@
     <ClCompile Include="..\src\lz4\lz4hc.c" />
     <ClCompile Include="..\src\lz4\xxhash.c" />
     <ClCompile Include="..\src\main.cpp" />
+    <ClCompile Include="..\src\PEDump\PEDump.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\src\dllproxy\version.def" />

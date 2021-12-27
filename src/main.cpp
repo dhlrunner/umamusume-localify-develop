@@ -114,6 +114,8 @@ int __stdcall DllMain(HINSTANCE, DWORD reason, LPVOID)
 		if(g_enable_console)
 		 	create_debug_console();
 
+		
+
 		std::thread init_thread([dicts]() {
 			logger::init_logger();
 			local::load_textdb(&dicts);

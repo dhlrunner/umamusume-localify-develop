@@ -16,6 +16,9 @@
     <Filter Include="lz4">
       <UniqueIdentifier>{5bfa2261-6f87-412a-9e8f-7d9830936e66}</UniqueIdentifier>
     </Filter>
+    <Filter Include="PEDump">
+      <UniqueIdentifier>{38b6d1d4-d600-43d4-b971-c21faca98956}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\il2cpp\il2cpp_symbols.hpp">
@@ -43,6 +46,9 @@
     </ClInclude>
     <ClInclude Include="..\src\lz4\xxhash.h">
       <Filter>lz4</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\PEDump\PEDump.h">
+      <Filter>PEDump</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -72,6 +78,9 @@
     </ClCompile>
     <ClCompile Include="..\src\lz4\xxhash.c">
       <Filter>lz4</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\PEDump\PEDump.cpp">
+      <Filter>PEDump</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
