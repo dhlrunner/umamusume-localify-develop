@@ -191,9 +191,10 @@ namespace
 
 	
 	void* live_CameraLookAt_UpdateCamera_orig = nullptr;
-	void live_CameraLookAt_UpdateCamera_hook() {
+	void live_CameraLookAt_UpdateCamera_hook(void* _this) {
 		printf("UpdateCamera Called\n");
-		//return reinterpret_cast<decltype(live_CameraLookAt_UpdateCamera_hook)*>(live_CameraLookAt_UpdateCamera_orig)();
+		return reinterpret_cast<decltype(live_CameraLookAt_UpdateCamera_hook)*>
+			(live_CameraLookAt_UpdateCamera_orig)(_this);
 	}
 
 	void* live_Cutt_LiveTimelineControl_GetCameraPos_orig = nullptr;
@@ -242,6 +243,49 @@ namespace
 		//wprintf()
 		return str;
 	}
+
+	void* GachaBGController_OverrideRarity_orig = nullptr;
+	void GachaBGController_OverrideRarity_hook(void* _this, int doorindex, int type) {
+		printf("[GachaBGController.OverrideRarity] Doorindex:=%d, GachaDefine.GachaRarityType_Door(enum)= %d\n", doorindex,type);
+		return reinterpret_cast<decltype(GachaBGController_OverrideRarity_hook)*>
+			(GachaBGController_OverrideRarity_orig)(_this,doorindex,type);
+	}
+
+	void* GachaBGController_SetGateDoorRarity_orig = nullptr;
+	void GachaBGController_SetGateDoorRarity_hook(void* _this, int doorindex) {
+		printf("[GachaBGController.SetGateDoorRarity] Doorindex=%d\n",doorindex);
+		return reinterpret_cast<decltype(GachaBGController_SetGateDoorRarity_hook)*>
+			(GachaBGController_SetGateDoorRarity_orig)(_this,doorindex);
+	}
+
+	void* LiveTitleController_Setup_orig = nullptr;
+	void LiveTitleController_Setup_hook(void* _this, LiveData* livedata, bool isAdjustForDialog = false){
+		//wprintf(L"%s", std::wstring(title->start_char).c_str());
+		printf("LiveTitle_Setup: [%d]\n", livedata->BackdancerDress);
+		//return reinterpret_cast<decltype(LiveTitleController_Setup_hook)*>
+		//	(LiveTitleController_Setup_orig)(_this, livedata,isAdjustForDialog);
+	}
+	void* LiveTitleController_FadeIn_orig = nullptr;
+	void LiveTitleController_FadeIn_hook(void* _this, float duration, float currentTime) {
+		printf("Title_FadeIn %.5f, %.5f\n", duration, currentTime);
+		//return reinterpret_cast<decltype(LiveTitleController_FadeIn_hook)*>
+		//	(LiveTitleController_FadeIn_orig)(_this,duration,currentTime);
+	}
+
+	void* LiveTitleController_FadeOut_orig = nullptr;
+	void LiveTitleController_FadeOut_hook(void* _this, float duration, float currentTime) {
+		//printf("Title_FadeOut %.5f, %.5f\n", duration, currentTime);
+		//return reinterpret_cast<decltype(LiveTitleController_FadeOut_hook)*>
+		//	(LiveTitleController_FadeOut_orig)(_this,duration,currentTime);
+		return;
+	}
+
+	/*void* GachaBGController_GateDoor_SetRarity_orig = nullptr;
+	void GachaBGController_GateDoor_SetRarity_hook(void* _this, int e) {
+		printf("[GachaBGController.GateDoor.SetRarity] Raritydoor_Type=%d\n", e);
+		return reinterpret_cast<decltype(GachaBGController_GateDoor_SetRarity_hook)*>
+			(GachaBGController_GateDoor_SetRarity_orig)(_this, e);
+	}*/
 
 	bool (*is_virt)() = nullptr;
 	int last_height = 0, last_width = 0;
@@ -604,7 +648,7 @@ namespace
 				"LiveCameraCullingLayer_Helper", "GetCullingMask", 1
 			));
 		
-		auto live_CameraLookAt_UpdateCamera_addr = reinterpret_cast<void(*)(void)>(
+		auto live_CameraLookAt_UpdateCamera_addr = reinterpret_cast<void(*)(void*)>(
 			il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop.Live",
 			"CameraLookAt", "UpdateCamera", 0
@@ -624,6 +668,42 @@ namespace
 			"umamusume.dll", "Gallop",
 			"AssetBundleHelper", "GetResourceVer", 0
 		);
+		
+		auto GachaBGController_OverrideRarity_addr = reinterpret_cast<void(*)(void*, int, int)>(
+			il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"GachaBGController", "OverrideRarity", 2
+		));
+
+		
+		auto GachaBGController_SetGateDoorRarity_addr = reinterpret_cast<void(*)(void*,int)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"GachaBGController", "SetGateDoorRarity", 1
+			));
+
+		auto LiveTitleController_Setup_addr = 
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop.Live",
+				"LiveTitleController", "Setup", 2
+			);
+		auto LiveTitleController_FadeIn_addr = reinterpret_cast<void(*)(void*,float,float)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop.Live",
+				"LiveTitleController", "FadeIn", 2
+			));
+
+		auto LiveTitleController_FadeOut_addr = reinterpret_cast<void(*)(void*, float, float)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop.Live",
+				"LiveTitleController", "FadeOut", 2
+			));
+
+		/*auto GachaBGController_GateDoor_SetRarity_addr = reinterpret_cast<void(*)(void*, int)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"GachaBGController.GateDoor", "SetRarity", 1
+			));*/
 
 #pragma endregion
 
@@ -638,10 +718,16 @@ namespace
 		ADD_HOOK(query_dispose, "Query::Dispose at %p\n");
 		ADD_HOOK(set_animefps, "UnityEngine.AnimationClip.set_frameRate at %p \n");
 		ADD_HOOK(live_cam_GetCullingMask, "Gallop.Live.Cutt.LiveCameraCullingLayer_Helper.GetCullingMask(uint) at %p\n");
-		//ADD_HOOK(live_CameraLookAt_UpdateCamera, "Gallop.Live.CameraLookAt.UpdateCamera(longlong) at %p \n");
+		ADD_HOOK(live_CameraLookAt_UpdateCamera, "Gallop.Live.CameraLookAt.UpdateCamera(longlong) at %p \n");
 		ADD_HOOK(live_Cutt_LiveTimelineControl_GetCameraPos, "Gallop.Live.Cutt.LiveTimelineControl.GetCameraPos(int) at %p\n");
 		ADD_HOOK(live_Cutt_LiveTimelineControl_set_liveStageCenterPos, "Gallop.Live.Cutt.LiveTimelineControl.set_liveStageCenterPos(Vector3) at %p\n");
 		ADD_HOOK(AssetBundleHelper_GetResourceVer, "Gallop.AssetBundleHelper.GetResourceVer() at %p\n");
+		ADD_HOOK(GachaBGController_OverrideRarity, "Gallop.GachaBGController.OverrideRarity(int, int(enum)) at %p\n");
+		ADD_HOOK(GachaBGController_SetGateDoorRarity, "Gallop.GachaBGController.SetRarity(int) at %p\n");
+		ADD_HOOK(LiveTitleController_Setup, "Gallop.Live.LiveTitleController.Setup at %p\n");
+		ADD_HOOK(LiveTitleController_FadeIn, "Gallop.Live.LiveTitleController.FadeIn(float,float) at %p\n");
+		ADD_HOOK(LiveTitleController_FadeOut, "Gallop.Live.LiveTitleController.FadeOut(float,float) at %p\n");
+		//ADD_HOOK(GachaBGController_GateDoor_SetRarity, "Gallop.GachaBGController.GateDoor.SetRarity(int(enum)) at %p\n");
 		if (g_replace_font)
 		{
 			ADD_HOOK(on_populate, "Gallop.TextCommon::OnPopulateMesh at %p\n");

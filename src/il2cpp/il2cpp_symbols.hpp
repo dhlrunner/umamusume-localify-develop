@@ -36,6 +36,8 @@ public:
 	float z;
 };
 
+
+
 struct Resolution_t
 {
 public:
@@ -196,6 +198,29 @@ typedef struct Il2CppArraySize
 } Il2CppArraySize;
 
 static const size_t kIl2CppSizeOfArray = (offsetof(Il2CppArraySize, vector));
+
+//Gallop.MasterLiveData.LiveData
+struct LiveData {
+public:
+	int Musicid;
+	int Sort;
+	int MusicType;
+	Il2CppString* TitleColorTop;
+	Il2CppString* TitleColorBottom;
+	int ConditionType;
+	int SongCharaType;
+	int LiveMemberNumber;
+	int DefaultMainDress;
+	int DefaultMainDressColor;
+	int DefaultMobDress;
+	int DefaultMobDressColor;
+	int BackdancerOrder;
+	int BackdancerDress;
+	int BackdancerDressColor;
+	int HasLive;
+	long StartDate;
+	long EndDate;
+};
 
 // function types
 typedef Il2CppString* (*il2cpp_string_new_utf16_t)(const wchar_t* str, unsigned int len);
