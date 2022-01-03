@@ -222,6 +222,14 @@ public:
 	long EndDate;
 };
 
+//LibNative.Sqlite3
+struct DBConnection_t
+{
+public:
+	void* DBHandle;
+	Il2CppString* dbPath;
+};
+
 // function types
 typedef Il2CppString* (*il2cpp_string_new_utf16_t)(const wchar_t* str, unsigned int len);
 typedef Il2CppString* (*il2cpp_string_new_t)(const char* str);

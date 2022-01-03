@@ -15,6 +15,8 @@ using namespace std;
 
 namespace
 {
+	int race_Currentrank = 0;
+	int race_MaxRank = 0;
 	bool isLiveStartFlag = false;
 	int count = 0;
 	char* readAllFileBytes(const char* name)
@@ -97,7 +99,13 @@ namespace
 				pedump(ga, "dumped_GameAssembly.dll");
 			}
 			ga = nullptr;
-
+			//HMODULE sq = GetModuleHandle("libnative.dll");
+			//if (sq != nullptr) {
+			//	//std::string exe_name = module_filename(NULL);
+			//	printf("Trying to dump LibNative.Runtime.dll...\n");
+			//	pedump(sq, "dumped_LibNative.Runtime.dll");
+			//}
+			//sq = nullptr;
 			path_game_assembly();
 			bootstrap_carrot_juicer();
 			MH_DisableHook(LoadLibraryW);
@@ -131,7 +139,7 @@ namespace
 	std::unordered_map<void*, bool> text_queries;
 
 	void* query_ctor_orig = nullptr;
-	void* query_ctor_hook(void* _this, void* conn, Il2CppString* sql)
+	void* query_ctor_hook(void* _this, DBConnection_t* conn, Il2CppString* sql)
 	{
 		auto ssql = std::wstring(sql->start_char);
 
@@ -142,7 +150,15 @@ namespace
 		{
 			text_queries.emplace(_this, true);
 		}
+		
+		//Il2CppString* handle = (Il2CppString*)conn + 0xcc0;
+		//wprintf(L"SQL Connection[ %s ]", wstring(conn.dbPath->start_char).c_str());
 		//wprintf(L"SQL_Query[ %s ]\n", ssql.c_str());
+
+		
+		//const wchar_t* editsql = L"update text_data set `text`=\"Test01\" where `id`=16 and `category`=16 and `index`=1001;";
+		
+		//reinterpret_cast<decltype(query_ctor_hook)*>(query_ctor_orig)(_this, conn, il2cpp_string_new_utf16(editsql,wcslen(editsql)));
 		//printf("Text: %s\n", text_queries[0]);
 		return reinterpret_cast<decltype(query_ctor_hook)*>(query_ctor_orig)(_this, conn, sql);
 	}
@@ -278,6 +294,53 @@ namespace
 		//return reinterpret_cast<decltype(LiveTitleController_FadeOut_hook)*>
 		//	(LiveTitleController_FadeOut_orig)(_this,duration,currentTime);
 		return;
+	}
+
+	void* Unity_Post_orig = nullptr;
+	void* Unity_Post_hook(Il2CppString* Uri, void* stuff) {
+		wprintf(L"%s\n", std::wstring(Uri->start_char).c_str());
+		return reinterpret_cast<decltype(Unity_Post_hook)*>
+			(Unity_Post_orig)(Uri, stuff);
+	}
+
+	void* RaceUI_SetRaceUIActive_orig = nullptr;
+	void RaceUI_SetRaceUIActive_hook(void* _this, bool active) {
+		printf("RaceUI.SetRaceUIActive = %d\n", active);
+		return reinterpret_cast<decltype(RaceUI_SetRaceUIActive_hook)*>
+			(RaceUI_SetRaceUIActive_orig)(_this,active);
+	}
+
+	void* RaceUI_SetVisibleRank_orig = nullptr;
+	void RaceUI_SetVisibleRank_hook(void* _this, bool active) {
+		printf("RaceUI.SetVisibleRank = %d\n", active);
+		return reinterpret_cast<decltype(RaceUI_SetVisibleRank_hook)*>
+			(RaceUI_SetVisibleRank_orig)(_this, active);
+	}
+
+	void* RaceUIRank_Setup_orig = nullptr;
+	void RaceUIRank_Setup_hook(void* _this,int index, int indexMax, void* displayTarget, void* distanceCheckTarget, int horseNum, float showDistance, float hideDistance) {
+		printf("RaceUIRank_Setup index=%d, indexMax=%d, horseNum=%d, showDist=%5f, hideDist=%5f\n"
+			, index, indexMax, horseNum, showDistance, hideDistance);
+		race_Currentrank = horseNum-5;
+		race_MaxRank = horseNum;
+		return reinterpret_cast<decltype(RaceUIRank_Setup_hook)*>
+			(RaceUIRank_Setup_orig)(_this, index, indexMax, displayTarget, distanceCheckTarget, horseNum, 0.0f, hideDistance+9999.9f);
+	}
+
+	void* RaceUIRank_PlayPlayerRankUp_orig = nullptr;
+	void RaceUIRank_PlayPlayerRankUp_hook(void* _this) {
+		race_Currentrank--;
+		printf("PlayPlayerRankUp() Called -> Current Rank: %d/%d\n",race_Currentrank,race_MaxRank);
+		return reinterpret_cast<decltype(RaceUIRank_PlayPlayerRankUp_hook)*>
+			(RaceUIRank_PlayPlayerRankUp_orig)(_this);
+	}
+
+	void* RaceUIRank_PlayPlayerRankDown_orig = nullptr;
+	void RaceUIRank_PlayPlayerRankDown_hook(void* _this) {
+		race_Currentrank++;
+		printf("PlayPlayerRankDown() Called -> Current Rank: %d/%d\n",race_Currentrank, race_MaxRank);
+		return reinterpret_cast<decltype(RaceUIRank_PlayPlayerRankDown_hook)*>
+			(RaceUIRank_PlayPlayerRankDown_orig)(_this);
 	}
 
 	/*void* GachaBGController_GateDoor_SetRarity_orig = nullptr;
@@ -699,6 +762,42 @@ namespace
 				"LiveTitleController", "FadeOut", 2
 			));
 
+		auto Unity_Post_addr = reinterpret_cast<void(*)(Il2CppString*,void*)>(
+			il2cpp_symbols::get_method_pointer(
+				"UnityEngine.UnityWebRequestModule.dll", "UnityEngine.Networking",
+				"UnityWebRequest", "Post", 2
+			));
+
+		auto RaceUI_SetRaceUIActive_addr = reinterpret_cast<void(*)(void*,bool)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"RaceUI", "SetRaceUIActive", 1
+			));
+
+		auto RaceUI_SetVisibleRank_addr = reinterpret_cast<void(*)(void*, bool)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"RaceUI", "SetVisibleRank", 1
+			));
+
+		auto RaceUIRank_Setup_addr = reinterpret_cast<void(*)(void*,int,int,void*,void*,int,float,float)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"RaceUIRank", "Setup", 7
+			));
+
+		auto RaceUIRank_PlayPlayerRankDown_addr = reinterpret_cast<void(*)(void*)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"RaceUIRank", "PlayPlayerRankDown", 0
+			));
+
+		auto RaceUIRank_PlayPlayerRankUp_addr = reinterpret_cast<void(*)(void*)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"RaceUIRank", "PlayPlayerRankUp", 0
+			));
+
 		/*auto GachaBGController_GateDoor_SetRarity_addr = reinterpret_cast<void(*)(void*, int)>(
 			il2cpp_symbols::get_method_pointer(
 				"umamusume.dll", "Gallop",
@@ -727,6 +826,12 @@ namespace
 		ADD_HOOK(LiveTitleController_Setup, "Gallop.Live.LiveTitleController.Setup at %p\n");
 		ADD_HOOK(LiveTitleController_FadeIn, "Gallop.Live.LiveTitleController.FadeIn(float,float) at %p\n");
 		ADD_HOOK(LiveTitleController_FadeOut, "Gallop.Live.LiveTitleController.FadeOut(float,float) at %p\n");
+		ADD_HOOK(Unity_Post, "Unity_Post at %p\n");
+		ADD_HOOK(RaceUI_SetRaceUIActive, "RaceUI.SetRaceUIActive(bool) at %p\n");
+		ADD_HOOK(RaceUI_SetVisibleRank, "RaceUI.SetVisibleRank(bool) at %p\n");
+		ADD_HOOK(RaceUIRank_Setup, "RaceUIRank.Setup(7) at %p\n");
+		ADD_HOOK(RaceUIRank_PlayPlayerRankUp, "RaceUIRank.PlayPlayerRankUp() at %p\n");
+		ADD_HOOK(RaceUIRank_PlayPlayerRankDown, "RaceUIRank.PlayPlayerRankDown() at %p\n");
 		//ADD_HOOK(GachaBGController_GateDoor_SetRarity, "Gallop.GachaBGController.GateDoor.SetRarity(int(enum)) at %p\n");
 		if (g_replace_font)
 		{
