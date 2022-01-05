@@ -9,6 +9,10 @@ char server_ip[256];
 DWORD getCurrentDisplayHz();
 void DumpHex(const void* data, size_t size);
 
+WSADATA wsa;
+SOCKET s;
+struct sockaddr_in server;
+
 #pragma comment(lib, "ws2_32")
 
 using namespace std;
@@ -19,6 +23,51 @@ namespace
 	int race_MaxRank = 0;
 	bool isLiveStartFlag = false;
 	int count = 0;
+
+	void initSocket() {
+		printf("\nInitialising Winsock...");
+		if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
+		{
+			printf("Failed. Error Code : %d", WSAGetLastError());
+			return;
+		}
+
+		printf("Initialised.\n");
+
+		//Create a socket
+		if ((s = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET)
+		{
+			printf("Could not create socket : %d", WSAGetLastError());
+		}
+
+		printf("Socket created.\n");
+
+
+		server.sin_addr.s_addr = inet_addr("127.0.0.1");
+		server.sin_family = AF_INET;
+		server.sin_port = htons(565);
+
+		//Connect to remote server
+		if (connect(s, (struct sockaddr*)&server, sizeof(server)) < 0)
+		{
+			puts("connect error");
+			return;
+		}
+
+		//puts("Connected");
+	}
+
+	void sendDataToSock(const char* data,int length) {
+		initSocket();
+		if (send(s, data, length, 0) < 0)
+		{
+			puts("Send failed");
+			//return;
+		}
+		shutdown(s, SD_SEND);
+		WSACleanup();
+	}
+
 	char* readAllFileBytes(const char* name)
 	{
 		ifstream fl(name);
@@ -277,9 +326,9 @@ namespace
 	void* LiveTitleController_Setup_orig = nullptr;
 	void LiveTitleController_Setup_hook(void* _this, LiveData* livedata, bool isAdjustForDialog = false){
 		//wprintf(L"%s", std::wstring(title->start_char).c_str());
-		printf("LiveTitle_Setup: [%d]\n", livedata->BackdancerDress);
-		//return reinterpret_cast<decltype(LiveTitleController_Setup_hook)*>
-		//	(LiveTitleController_Setup_orig)(_this, livedata,isAdjustForDialog);
+		printf("LiveTitle_Setup: [%d]\n", livedata->LiveMemberNumber);
+		return reinterpret_cast<decltype(LiveTitleController_Setup_hook)*>
+			(LiveTitleController_Setup_orig)(_this, livedata,isAdjustForDialog);
 	}
 	void* LiveTitleController_FadeIn_orig = nullptr;
 	void LiveTitleController_FadeIn_hook(void* _this, float duration, float currentTime) {
@@ -342,6 +391,27 @@ namespace
 		return reinterpret_cast<decltype(RaceUIRank_PlayPlayerRankDown_hook)*>
 			(RaceUIRank_PlayPlayerRankDown_orig)(_this);
 	}
+
+	void* RaceManager_GetHorseDistanceByIndex_orig = nullptr;
+	float RaceManager_GetHorseDistanceByIndex_hook(void* _this, int index) {
+		float dist = reinterpret_cast<decltype(RaceManager_GetHorseDistanceByIndex_hook)*>
+			(RaceManager_GetHorseDistanceByIndex_orig)(_this,index);
+		char const* p = reinterpret_cast<char const*>(&dist);
+		printf("Horse=%d, CurrentDist=%.1f m\n",index+1, dist);
+		//sendDataToSock(p, 4);
+		return dist;
+	}
+
+	/*void* Race_GetRankNumSmallPath_orig = nullptr;
+	Il2CppString* Race_GetRankNumSmallPath_hook(int num) {
+
+		auto str = reinterpret_cast<decltype(Race_GetRankNumSmallPath_hook)*>
+			(Race_GetRankNumSmallPath_orig)(num);
+
+		wprintf(L"GetRankNumSmallPath = %s\n", std::wstring(str->start_char).c_str());
+
+		return str;
+	}*/
 
 	/*void* GachaBGController_GateDoor_SetRarity_orig = nullptr;
 	void GachaBGController_GateDoor_SetRarity_hook(void* _this, int e) {
@@ -745,11 +815,11 @@ namespace
 				"GachaBGController", "SetGateDoorRarity", 1
 			));
 
-		auto LiveTitleController_Setup_addr = 
+		auto LiveTitleController_Setup_addr = reinterpret_cast<void(*)(void*, LiveData*,bool)>(
 			il2cpp_symbols::get_method_pointer(
 				"umamusume.dll", "Gallop.Live",
 				"LiveTitleController", "Setup", 2
-			);
+			));
 		auto LiveTitleController_FadeIn_addr = reinterpret_cast<void(*)(void*,float,float)>(
 			il2cpp_symbols::get_method_pointer(
 				"umamusume.dll", "Gallop.Live",
@@ -798,6 +868,17 @@ namespace
 				"RaceUIRank", "PlayPlayerRankUp", 0
 			));
 
+		auto RaceManager_GetHorseDistanceByIndex_addr = reinterpret_cast<void(*)(void*,int)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"RaceManager", "GetHorseDistanceByIndex", 1
+			));
+
+		/*auto Race_GetRankNumSmallPath_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.AtlasSpritePath",
+			"Race", "GetRankNumSmallPath", 1
+		);*/
+
 		/*auto GachaBGController_GateDoor_SetRarity_addr = reinterpret_cast<void(*)(void*, int)>(
 			il2cpp_symbols::get_method_pointer(
 				"umamusume.dll", "Gallop",
@@ -832,6 +913,8 @@ namespace
 		ADD_HOOK(RaceUIRank_Setup, "RaceUIRank.Setup(7) at %p\n");
 		ADD_HOOK(RaceUIRank_PlayPlayerRankUp, "RaceUIRank.PlayPlayerRankUp() at %p\n");
 		ADD_HOOK(RaceUIRank_PlayPlayerRankDown, "RaceUIRank.PlayPlayerRankDown() at %p\n");
+		ADD_HOOK(RaceManager_GetHorseDistanceByIndex, "RaceManager.GetHorseDistanceByIndex(int) at %p");
+		//ADD_HOOK(Race_GetRankNumSmallPath, "AtlasSpritePath.Race.GetRankNumSmallPath(int) at %p");
 		//ADD_HOOK(GachaBGController_GateDoor_SetRarity, "Gallop.GachaBGController.GateDoor.SetRarity(int(enum)) at %p\n");
 		if (g_replace_font)
 		{
@@ -866,6 +949,7 @@ namespace
 		
 		if (g_dump_entries)
 			dump_all_entries();
+
 	}
 	std::string current_time()
 	{

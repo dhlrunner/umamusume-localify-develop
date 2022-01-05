@@ -200,26 +200,29 @@ typedef struct Il2CppArraySize
 static const size_t kIl2CppSizeOfArray = (offsetof(Il2CppArraySize, vector));
 
 //Gallop.MasterLiveData.LiveData
-struct LiveData {
+struct __declspec(align(8)) LiveData {
 public:
-	int Musicid;
-	int Sort;
-	int MusicType;
+	int32_t MusicId;
+	int32_t Sort;
+	int32_t MusicType;
 	Il2CppString* TitleColorTop;
 	Il2CppString* TitleColorBottom;
-	int ConditionType;
-	int SongCharaType;
-	int LiveMemberNumber;
-	int DefaultMainDress;
-	int DefaultMainDressColor;
-	int DefaultMobDress;
-	int DefaultMobDressColor;
-	int BackdancerOrder;
-	int BackdancerDress;
-	int BackdancerDressColor;
-	int HasLive;
-	long StartDate;
-	long EndDate;
+	int32_t ConditionType;
+	int32_t SongCharaType;
+	int32_t LiveMemberNumber;
+	int32_t DefaultMainDress;
+	int32_t DefaultMainDressColor;
+	int32_t DefaultMobDress;
+	int32_t DefaultMobDressColor;
+	int32_t BackdancerOrder;
+	int32_t BackdancerDress;
+	int32_t BackdancerDressColor;
+	int32_t HasLive;
+	int64_t StartDate;
+	int64_t EndDate;
+	int32_t _eConditionType;
+	int32_t _eSongCharaType;
+	int32_t _eMusicType;
 };
 
 //LibNative.Sqlite3

@@ -35,6 +35,8 @@
 
 #include "lz4.h"
 
+#pragma comment(lib,"ws2_32.lib") //Winsock Library
+
 extern bool g_dump_entries;
 extern bool g_enable_logger;
 extern bool g_enable_console;
