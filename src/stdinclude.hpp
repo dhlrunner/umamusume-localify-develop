@@ -17,6 +17,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <chrono>
 
 #include <MinHook.h>
 
@@ -48,3 +49,10 @@ extern bool g_replace_font;
 extern bool g_auto_fullscreen;
 extern bool g_autofps;
 extern bool g_lz4Encrypt;
+extern bool g_showLiveTitleWindow;
+extern bool g_sendHorseMeterData;
+extern bool g_saveMsgPack;
+extern bool g_dumpGamedll;
+extern float g_rankUIShowMeter;
+extern float g_rankUIHideoffset;
+extern bool g_liveCharaAutoDressReplace;

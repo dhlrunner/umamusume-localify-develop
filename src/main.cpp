@@ -15,6 +15,13 @@ float g_aspect_ratio = 16.f / 9.f;
 bool g_replace_font = true;
 bool g_auto_fullscreen = true;
 bool g_lz4Encrypt = true;
+bool g_showLiveTitleWindow = true;
+bool g_sendHorseMeterData = false;
+bool g_saveMsgPack = false;
+bool g_dumpGamedll = false;
+float g_rankUIShowMeter = 0.0f;
+float g_rankUIHideoffset = 0.0f;
+bool g_liveCharaAutoDressReplace = false;
 
 namespace
 {
@@ -70,6 +77,13 @@ namespace
 			g_auto_fullscreen = document["autoFullscreen"].GetBool();
 			g_autofps = document["autoFpsSet"].GetBool();
 			g_lz4Encrypt = document["lz4Encrypt"].GetBool();
+			g_dumpGamedll = document["dumpGameassembly"].GetBool();
+			g_saveMsgPack = document["saveMsgPack"].GetBool();
+			g_showLiveTitleWindow = document["showLiveTitleWindow"].GetBool();
+			g_sendHorseMeterData = document["sendHorseMeterData"].GetBool();
+			g_rankUIShowMeter = document["rankUIShowMeter"].GetFloat();
+			g_rankUIHideoffset = document["rankUIHideoffset"].GetFloat();
+			g_liveCharaAutoDressReplace = document["liveCharaAutoDressReplace"].GetBool();
 			
 			// Looks like not working for now
 			// g_aspect_ratio = document["customAspectRatio"].GetFloat();

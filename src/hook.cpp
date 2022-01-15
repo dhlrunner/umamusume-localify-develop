@@ -1,5 +1,6 @@
 #define _WINSOCK_DEPRECATED_NO_WARNINGS 1
 #define _CRT_SECURE_NO_WARNINGS 1
+#define MAX_HORSE_NUM 18
 
 #include <stdinclude.hpp>
 
@@ -23,51 +24,39 @@ namespace
 	int race_MaxRank = 0;
 	bool isLiveStartFlag = false;
 	int count = 0;
+	float horseMeters[MAX_HORSE_NUM] = {0.1};
+	float lastMeter = 0.0;
 
-	void initSocket() {
-		printf("\nInitialising Winsock...");
-		if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
+	void meterDataSendThread() {
+		printf("Thread IN!!!\n");
+		while (true)
 		{
-			printf("Failed. Error Code : %d", WSAGetLastError());
-			return;
+			//printf("Thread Alive!!\n");
+			if (horseMeters[0] != lastMeter) {
+				char* databyte = new char[sizeof(float) * MAX_HORSE_NUM];
+				int byteAdded = 0;
+				for (int i = 0; i < MAX_HORSE_NUM; i++) {
+					char* p = reinterpret_cast<char*>(&horseMeters[i]);
+					for (int k = 0; k < sizeof(float); k++)
+					{
+						databyte[byteAdded + k] = p[k];
+						//printf("p[%d]=0x%02X\n", k, p[k]);
+					}
+					byteAdded += sizeof(float);
+				}
+				httplib::Client cli(server_ip, server_port);
+				std::string data(databyte, sizeof(float) * MAX_HORSE_NUM);
+				auto res = cli.Post("/Mdataup", data, "application/binary");
+				delete[] databyte;
+				lastMeter = horseMeters[0];
+				
+			}
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		
 		}
-
-		printf("Initialised.\n");
-
-		//Create a socket
-		if ((s = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET)
-		{
-			printf("Could not create socket : %d", WSAGetLastError());
-		}
-
-		printf("Socket created.\n");
-
-
-		server.sin_addr.s_addr = inet_addr("127.0.0.1");
-		server.sin_family = AF_INET;
-		server.sin_port = htons(565);
-
-		//Connect to remote server
-		if (connect(s, (struct sockaddr*)&server, sizeof(server)) < 0)
-		{
-			puts("connect error");
-			return;
-		}
-
-		//puts("Connected");
+		
+		
 	}
-
-	void sendDataToSock(const char* data,int length) {
-		initSocket();
-		if (send(s, data, length, 0) < 0)
-		{
-			puts("Send failed");
-			//return;
-		}
-		shutdown(s, SD_SEND);
-		WSACleanup();
-	}
-
 	char* readAllFileBytes(const char* name)
 	{
 		ifstream fl(name);
@@ -141,13 +130,16 @@ namespace
 		if (path == L"cri_ware_unity.dll"s)
 		{
 			//GameAssembly ดýวม
-			HMODULE ga = GetModuleHandle("GameAssembly.dll");
-			if (ga != nullptr) {
-				//std::string exe_name = module_filename(NULL);
-				printf("Trying to dump GameAssembly.dll...\n");
-				pedump(ga, "dumped_GameAssembly.dll");
+			if (g_dumpGamedll) {
+				HMODULE ga = GetModuleHandle("GameAssembly.dll");
+				if (ga != nullptr) {
+					//std::string exe_name = module_filename(NULL);
+					printf("Trying to dump GameAssembly.dll...\n");
+					pedump(ga, "dumped_GameAssembly.dll");
+				}
+				ga = nullptr;
 			}
-			ga = nullptr;
+			
 			//HMODULE sq = GetModuleHandle("libnative.dll");
 			//if (sq != nullptr) {
 			//	//std::string exe_name = module_filename(NULL);
@@ -295,10 +287,10 @@ namespace
 		wcstombs(conv_str, verstr.c_str(), str->length + 1);
 		
 
-		httplib::Client cli("127.0.0.1", 564);
-		std::string data(conv_str, str->length + 2);
+		//httplib::Client cli("127.0.0.1", 564);
+		//std::string data(conv_str, str->length + 2);
 		
-		auto res = cli.Post("/umamusume_test_server/tool/upload_resourcever", data, "application/text");
+		//auto res = cli.Post("/umamusume_test_server/tool/upload_resourcever", data, "application/text");
 
 		delete[] conv_str;
 		//res->status;
@@ -333,15 +325,20 @@ namespace
 	void* LiveTitleController_FadeIn_orig = nullptr;
 	void LiveTitleController_FadeIn_hook(void* _this, float duration, float currentTime) {
 		printf("Title_FadeIn %.5f, %.5f\n", duration, currentTime);
-		//return reinterpret_cast<decltype(LiveTitleController_FadeIn_hook)*>
-		//	(LiveTitleController_FadeIn_orig)(_this,duration,currentTime);
+		if (g_showLiveTitleWindow) {
+			return reinterpret_cast<decltype(LiveTitleController_FadeIn_hook)*>
+				(LiveTitleController_FadeIn_orig)(_this, duration, currentTime);
+		}
+		return;
 	}
 
 	void* LiveTitleController_FadeOut_orig = nullptr;
 	void LiveTitleController_FadeOut_hook(void* _this, float duration, float currentTime) {
 		//printf("Title_FadeOut %.5f, %.5f\n", duration, currentTime);
-		//return reinterpret_cast<decltype(LiveTitleController_FadeOut_hook)*>
-		//	(LiveTitleController_FadeOut_orig)(_this,duration,currentTime);
+		if (g_showLiveTitleWindow) {
+			return reinterpret_cast<decltype(LiveTitleController_FadeOut_hook)*>
+				(LiveTitleController_FadeOut_orig)(_this, duration, currentTime);
+		}		
 		return;
 	}
 
@@ -373,7 +370,8 @@ namespace
 		race_Currentrank = horseNum-5;
 		race_MaxRank = horseNum;
 		return reinterpret_cast<decltype(RaceUIRank_Setup_hook)*>
-			(RaceUIRank_Setup_orig)(_this, index, indexMax, displayTarget, distanceCheckTarget, horseNum, 0.0f, hideDistance+9999.9f);
+			(RaceUIRank_Setup_orig)(_this, index, indexMax, displayTarget, distanceCheckTarget, horseNum, 
+				g_rankUIShowMeter < 0? 0.0f: g_rankUIShowMeter, hideDistance+g_rankUIHideoffset);
 	}
 
 	void* RaceUIRank_PlayPlayerRankUp_orig = nullptr;
@@ -396,11 +394,46 @@ namespace
 	float RaceManager_GetHorseDistanceByIndex_hook(void* _this, int index) {
 		float dist = reinterpret_cast<decltype(RaceManager_GetHorseDistanceByIndex_hook)*>
 			(RaceManager_GetHorseDistanceByIndex_orig)(_this,index);
-		char const* p = reinterpret_cast<char const*>(&dist);
+		horseMeters[index] = dist;
 		printf("Horse=%d, CurrentDist=%.1f m\n",index+1, dist);
 		//sendDataToSock(p, 4);
 		return dist;
 	}
+
+	void* LiveTheaterInfo_GetDefaultDressid_orig = nullptr;
+	void LiveTheaterInfo_GetDefaultDressid_hook(void* _this,int index, int charaId, bool isMob, int* dressId, int* dressColor, int* dressId2, int* dressColor2) {
+		printf("LiveTheaterInfo_GetDefaultDressid index=%d,charaid=%d,ismob=%d,*dressId=%p,*dressColor=%p,*dressId2=%p,dressColor2=%p\n",
+			index, charaId, isMob, dressId, dressColor, dressId2, dressColor2);
+		//*dressId = *dressId;
+		return reinterpret_cast<decltype(LiveTheaterInfo_GetDefaultDressid_hook)*>
+			(LiveTheaterInfo_GetDefaultDressid_orig)(_this,index,charaId,isMob,dressId,dressColor,dressId2,dressColor2);
+	}
+
+	void* LiveTheaterInfo_UpdateCharaDressIds_orig = nullptr;
+	void LiveTheaterInfo_UpdateCharaDressIds_hook(void* _this, void* LiveTheaterMemberInfo) {
+		printf("LiveTheaterInfo_UpdateCharaDressIds called\n");
+		reinterpret_cast<decltype(LiveTheaterInfo_UpdateCharaDressIds_hook)*>
+			(LiveTheaterInfo_UpdateCharaDressIds_orig)(_this, LiveTheaterMemberInfo);
+	}
+
+	void* LiveTheaterInfo_CheckDress_orig = nullptr;
+	void LiveTheaterInfo_CheckDress_hook(void* _this, int index, CharaDressIdSet* idset) {
+		printf("LiveTheaterInfo_CheckDress called index=%d, charaid=%d\n",index,idset->_charaId);
+		if (g_liveCharaAutoDressReplace) {
+			return reinterpret_cast<decltype(LiveTheaterInfo_CheckDress_hook)*>
+				(LiveTheaterInfo_CheckDress_orig)(_this, index, idset);
+		}
+		return;
+	}
+
+	void* BitmapTextCommon_GetFontPath_orig = nullptr;
+	Il2CppString* BitmapTextCommon_GetFontPath_hook(void* _this,void* fontType) {
+		auto path = reinterpret_cast<decltype(BitmapTextCommon_GetFontPath_hook)*>
+			(BitmapTextCommon_GetFontPath_orig)(_this,fontType);
+		wprintf(L"FontPath=%s\n", std::wstring(path->start_char).c_str());
+		return path;
+	}
+
 
 	/*void* Race_GetRankNumSmallPath_orig = nullptr;
 	Il2CppString* Race_GetRankNumSmallPath_hook(int num) {
@@ -874,6 +907,30 @@ namespace
 				"RaceManager", "GetHorseDistanceByIndex", 1
 			));
 
+		auto LiveTheaterInfo_GetDefaultDressid_addr = reinterpret_cast<void(*)(void*,int,int,bool,int*,int*,int*,int*)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"LiveTheaterInfo", "GetDefaultDressId", 7
+			));
+
+		auto LiveTheaterInfo_UpdateCharaDressIds_addr = reinterpret_cast<void(*)(void*, void*)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"LiveTheaterInfo", "UpdateCharaDressIds", 1
+			));
+
+		auto LiveTheaterInfo_CheckDress_addr = reinterpret_cast<void(*)(void*,int ,CharaDressIdSet*)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"LiveTheaterInfo", "CheckDress", 2
+			));
+
+		auto BitmapTextCommon_GetFontPath_addr = reinterpret_cast<void(*)(void*,void*)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"BitmapTextCommon", "GetFontPath", 1
+			));
+
 		/*auto Race_GetRankNumSmallPath_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop.AtlasSpritePath",
 			"Race", "GetRankNumSmallPath", 1
@@ -914,6 +971,10 @@ namespace
 		ADD_HOOK(RaceUIRank_PlayPlayerRankUp, "RaceUIRank.PlayPlayerRankUp() at %p\n");
 		ADD_HOOK(RaceUIRank_PlayPlayerRankDown, "RaceUIRank.PlayPlayerRankDown() at %p\n");
 		ADD_HOOK(RaceManager_GetHorseDistanceByIndex, "RaceManager.GetHorseDistanceByIndex(int) at %p");
+		ADD_HOOK(LiveTheaterInfo_GetDefaultDressid, "LiveTheaterInfo_GetDefaultDressid(...) at %p");
+		ADD_HOOK(LiveTheaterInfo_UpdateCharaDressIds, "LiveTheaterInfo_UpdateCharaDressIds(LiveTheaterMemberInfo[]) at %p");
+		ADD_HOOK(LiveTheaterInfo_CheckDress, "LiveTheaterInfo_CheckDress(int,CharaDressIdSet) at %p");
+		ADD_HOOK(BitmapTextCommon_GetFontPath, "BitmapTextCommon_GetFontPath(TextFormat.BitmapFont) at %p");
 		//ADD_HOOK(Race_GetRankNumSmallPath, "AtlasSpritePath.Race.GetRankNumSmallPath(int) at %p");
 		//ADD_HOOK(GachaBGController_GateDoor_SetRarity, "Gallop.GachaBGController.GateDoor.SetRarity(int(enum)) at %p\n");
 		if (g_replace_font)
@@ -950,6 +1011,9 @@ namespace
 		if (g_dump_entries)
 			dump_all_entries();
 
+		std::thread t1(meterDataSendThread);
+		t1.detach();
+		printf("Horse data send Thread started\n");
 	}
 	std::string current_time()
 	{
@@ -1022,9 +1086,12 @@ namespace
 		
 		printf("Server Response: %d Bytes\n",ret);
 		
-		//auto out_path = std::string("CarrotJuicer\\").append(current_time()).append("R.msgpack");
-		//write_file(out_path, decrypted, ret);
-		//printf("wrote response to %s\n", out_path.c_str());		
+		if (g_saveMsgPack) {
+			auto out_path = std::string("CarrotJuicer\\").append(current_time()).append("R.msgpack");
+			write_file(out_path, decrypted, ret);
+			printf("wrote response to %s\n", out_path.c_str());
+		}
+			
 		
 		if (g_sendserver) {
 			printf("------Real Cygames server -> modding server(local) -> Client------\n");
@@ -1043,14 +1110,17 @@ namespace
 			//printf("Status: %d\nContent-Length:%d\n", res->status, clength);
 			
 			memcpy(dst, returned, clength);//sss
-			delete[] decrypted;
+			
 
 			//delete[] returned;
 			//free(src);
 			printf("-----------------------------------------------------------------\n");
 		}
+		else {
+			memcpy(dst, decrypted, ret);
+		}
 		
-
+		delete[] decrypted;
 		//dst = {0};
 		return ret;
 	}
@@ -1093,12 +1163,25 @@ namespace
 			return ret;
 		}
 		else {
-			int ret = reinterpret_cast<decltype(LZ4_compress_default_ext_hook)*>(LZ4_compress_default_ext_orig)(
-				src, dst, srcSize, dstCapacity);
-			printf("Raw Client data: %d Bytes (Compressed/Encrypted to %d bytes) -> ", srcSize, ret);
-			auto out_path = std::string("CarrotJuicer\\").append(current_time()).append("Q.msgpack");
-			//write_file(out_path, src, srcSize);
-			//printf("wrote clinet request to %s\n", out_path.c_str());
+			int ret = 0;
+			if (g_lz4Encrypt) {
+				ret = reinterpret_cast<decltype(LZ4_compress_default_ext_hook)*>(LZ4_compress_default_ext_orig)(
+					src, dst, srcSize, dstCapacity);
+			}
+			else {
+				ret = LZ4_compress_default(src, dst, srcSize, dstCapacity);
+				//memcpy(dst, src, clength);
+				//ret = clength;
+			}
+			//int ret = reinterpret_cast<decltype(LZ4_compress_default_ext_hook)*>(LZ4_compress_default_ext_orig)(
+			//	src, dst, srcSize, dstCapacity);
+			printf("Raw Client data: %d Bytes (Compressed/Encrypted to %d bytes) -> \n", srcSize, ret);
+			if (g_saveMsgPack) {
+				auto out_path = std::string("CarrotJuicer\\").append(current_time()).append("Q.msgpack");
+				write_file(out_path, src, srcSize);
+				printf("wrote clinet request to %s\n", out_path.c_str());
+			}
+			
 			delete[] raw_data;
 			return ret;
 		}

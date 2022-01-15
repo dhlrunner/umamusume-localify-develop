@@ -225,6 +225,115 @@ public:
 	int32_t _eMusicType;
 };
 
+//Gallop.LiveTheaterMemberInfo
+struct __declspec(align(8)) LiveTheaterMemberInfo {
+	int32_t chara_id;
+	int32_t mob_id;
+	int32_t dress_id;
+	int32_t color_id;
+	int32_t dress_id2;
+	int32_t color_id2;
+};
+
+//Gallop.CharaDressIdSet
+struct __declspec(align(8)) CharaDressIdSet {
+	bool _IsMob_k__BackingField;
+	int32_t _DressColorId_k__BackingField;
+	int32_t _DressColorId2_k__BackingField;
+	struct System_Func_int__o* _getRandomMob;
+	int32_t _charaId;
+	int32_t _dressId;
+	int32_t _dressId2;
+};
+
+//Gallop.MobBuildInfo
+struct MobBuildInfo {
+	int32_t faceKindId;
+	int32_t hairKindId;
+	int32_t hairColorId;
+	int32_t DressColorId;
+	float HairCutoff;
+	int32_t AttachmentModelId;
+};
+
+//Gallop.CharacterBuildInfo
+struct __declspec(align(8)) CharacterBuildInfo {
+	int32_t _cardId;
+	int32_t _charaId;
+	int32_t _mobId;
+	int32_t _headModelSubId;
+	bool _isUseDressDataHeadModelSubId;
+	int32_t _bodyModelSubId;
+	int32_t _dressId;
+	int32_t _controllerType;
+	int32_t _zekken;
+	struct System_String_o* _name;
+	int32_t _genderType;
+	int32_t _heightType;
+	int32_t _bodySize;
+	int32_t _bustType;
+	float _height;
+	int32_t _skinType;
+	int32_t _socksType;
+	int32_t _defaultPersonalityType;
+	int32_t _raceGateInPersonalityType;
+	int32_t _raceRunPersonalityType;
+	int32_t _raceOverRunPersonalityType;
+	int32_t _raceRunningType;
+	int32_t _zekkenColor;
+	int32_t _zekkenFontColor;
+	int32_t _zekkenFontStyle;
+	struct UnityEngine_Texture_array* _wetTextureArray;
+	struct UnityEngine_Texture_array* _dirtTextureArray;
+	struct UnityEngine_GameObject_o* _sweatLocator;
+	struct UnityEngine_GameObject_o* _sweatObject;
+	int32_t _frameColor;
+	int32_t _popularity;
+	int32_t _npcType;
+	struct Gallop_CharacterBuildPathInfo_o* _charaBuildPathInfo;
+	struct Gallop_ClothBuildPathInfo_o* _clothBuildPathInfo;
+	MasterDressData* _dressElement;
+	int32_t _backDancerColorId;
+	struct MobBuildInfo _mobInfo;
+	bool _isPersonalDress;
+	int32_t _miniMobTailId;
+	int32_t _miniMobParentCharaId;
+	int32_t _overrideClothCategory;
+	int32_t _loadHashKey;
+	bool _isPreCreatedLoadHashKey;
+	bool _initialized;
+};
+
+//Gallop.MasterDressData
+struct __declspec(align(8)) MasterDressData {
+	int32_t Id;
+	int32_t ConditionType;
+	bool HaveMini;
+	int32_t GeneralPurpose;
+	int32_t CharaId;
+	int32_t UseGender;
+	int32_t BodyType;
+	int32_t BodyTypeSub;
+	int32_t BodySetting;
+	int32_t UseRace;
+	int32_t UseLive;
+	int32_t UseLiveTheater;
+	int32_t UseHome;
+	int32_t IsWet;
+	int32_t IsDirt;
+	int32_t HeadSubId;
+	int32_t UseSeason;
+	Il2CppString* DressColorMain;
+	Il2CppString* DressColorSub;
+	int32_t ColorNum;
+	int32_t DispOrder;
+	int32_t TailModelId;
+	int32_t TailModelSubId;
+	int64_t StartTime;
+	int64_t EndTime;
+	int32_t _getCondition;
+};
+
 //LibNative.Sqlite3
 struct DBConnection_t
 {
