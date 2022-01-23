@@ -4,6 +4,7 @@
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 #include <Windows.h>
+#include <signal.h>
 
 #include <shlobj.h>
 
@@ -16,6 +17,7 @@
 #include <locale>
 #include <string>
 #include <thread>
+#include <vector>
 #include <unordered_map>
 #include <chrono>
 
@@ -56,3 +58,6 @@ extern bool g_dumpGamedll;
 extern float g_rankUIShowMeter;
 extern float g_rankUIHideoffset;
 extern bool g_liveCharaAutoDressReplace;
+extern bool g_useExclusiveFullScreen;
+extern int g_exclusiveFullScreenWidth;
+extern int g_exclusiveFullScreenHeight;

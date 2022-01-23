@@ -2,14 +2,30 @@
 
 namespace
 {
-	Resolution_t* (*get_resolution)(Resolution_t* buffer);
-	void (*set_resolution)(int width, int height, bool fullscreen);
-	bool (*get_fullscreen)();
+	std::vector<std::string> explode(const std::string& str, const char& ch) {
+		std::string next;
+		std::vector<std::string> result;
 
-	int (*get_height)();
-	int (*get_width)();
-
-	int orig_height, orig_width;
+		// For each character in the string
+		for (std::string::const_iterator it = str.begin(); it != str.end(); it++) {
+			// If we've hit the terminal character
+			if (*it == ch) {
+				// If we have some characters accumulated
+				if (!next.empty()) {
+					// Add them to the result vector
+					result.push_back(next);
+					next.clear();
+				}
+			}
+			else {
+				// Accumulate the next character into the sequence
+				next += *it;
+			}
+		}
+		if (!next.empty())
+			result.push_back(next);
+		return result;
+	}
 
 	void console_thread()
 	{
@@ -19,37 +35,60 @@ namespace
 		{
 			std::cin >> line;
 
-			std::cout << "\n] " << line << "\n";
+			std::cout << "\numamusume_console> " << line << "\n";
 
-			if (line == "fullscreen")
+			if (line == "reload")
 			{
-				auto attached_thread = il2cpp_thread_attach(il2cpp_domain_get());
+				std::ifstream config_stream{ "config.json" };
+				std::vector<std::string> dicts{};
 
-				bool fullscreen_state = get_fullscreen();
-				int height = 0, width = 0;
+				rapidjson::IStreamWrapper wrapper{ config_stream };
+				rapidjson::Document document;
 
-				if (fullscreen_state)
+				document.ParseStream(wrapper);
+
+				if (!document.HasParseError())
 				{
-					height = orig_height;
-					width = orig_width;
+					
+					auto& dicts_arr = document["dicts"];
+					auto len = dicts_arr.Size();
+
+					for (size_t i = 0; i < len; ++i)
+					{
+						auto dict = dicts_arr[i].GetString();
+
+						dicts.push_back(dict);
+					}
 				}
-				else
-				{
-					orig_height = get_height();
-					orig_width = get_width();
-
-					Resolution_t res;
-					res = *get_resolution(&res);
-
-					height = res.height;
-					width = res.width;
+				else {
+					MessageBox(NULL, "Config.json parse error", "Error", MB_OK | MB_ICONERROR);
 				}
 
-				std::cout << "Toggle fullscreen to " << !fullscreen_state << "\n";
-
-				set_resolution(width, height, !fullscreen_state);
-
-				il2cpp_thread_detach(attached_thread);
+				config_stream.close();
+				local::reload_textdb(&dicts);
+			}
+			else if (line == "exit") {
+				exit(0);
+			}
+			else if (line == "crash") {
+				raise(SIGSEGV);
+			}
+			else if (line.rfind("fps",0)==0) {
+				std::vector<std::string> arg = explode(line, ':');
+				g_max_fps = std::stoi(arg[1].c_str());
+				printf("fps limit setted to : %d\n", g_max_fps);
+			}
+			else if (line == "autofps") {
+				g_autofps = !g_autofps;
+				printf("Auto fps limit %s\n", g_autofps ? "enabled." : "disabled.");
+			}
+			else if (line == "useExclusiveFullscreen") {
+				g_useExclusiveFullScreen = !g_useExclusiveFullScreen;
+				printf("Exclusive Fullscreen mode %s\n", g_useExclusiveFullScreen ? "enabled." : "disabled.");
+			}
+			else {
+				
+				printf("%s:Unknown command\n",line.c_str());
 			}
 		}
 	}
@@ -57,38 +96,8 @@ namespace
 
 void start_console()
 {
-	get_resolution = reinterpret_cast<Resolution_t * (*)(Resolution_t*)>(
-		il2cpp_symbols::get_method_pointer(
-		"UnityEngine.CoreModule.dll", "UnityEngine",
-		"Screen", "get_currentResolution", 0
-		)
-	);
-
-	set_resolution = reinterpret_cast<void(*)(int, int, bool)>(
-		il2cpp_symbols::get_method_pointer(
-			"UnityEngine.CoreModule.dll", "UnityEngine",
-			"Screen", "SetResolution", 3
-		)
-	);
-
-	get_fullscreen = reinterpret_cast<bool (*)()>(
-		il2cpp_symbols::get_method_pointer(
-			"UnityEngine.CoreModule.dll", "UnityEngine",
-			"Screen", "get_fullScreen", 0
-	));
-
-	get_height = reinterpret_cast<int (*)()>(
-		il2cpp_symbols::get_method_pointer(
-			"UnityEngine.CoreModule.dll", "UnityEngine",
-			"Screen", "get_height", 0
-	));
-
-	get_width = reinterpret_cast<int (*)()>(
-		il2cpp_symbols::get_method_pointer(
-			"UnityEngine.CoreModule.dll", "UnityEngine",
-			"Screen", "get_width", 0
-	));
-
-
+#ifdef _DEBUG
 	std::thread(console_thread).detach();
+#endif
 }
+

@@ -3,6 +3,7 @@
 
 extern bool init_hook();
 extern void uninit_hook();
+extern void start_console();
 
 bool g_dump_entries = false;
 bool g_enable_logger = false;
@@ -22,6 +23,9 @@ bool g_dumpGamedll = false;
 float g_rankUIShowMeter = 0.0f;
 float g_rankUIHideoffset = 0.0f;
 bool g_liveCharaAutoDressReplace = false;
+bool g_useExclusiveFullScreen = false;
+int g_exclusiveFullScreenWidth = 1920;
+int g_exclusiveFullScreenHeight = 1080;
 
 namespace
 {
@@ -84,6 +88,9 @@ namespace
 			g_rankUIShowMeter = document["rankUIShowMeter"].GetFloat();
 			g_rankUIHideoffset = document["rankUIHideoffset"].GetFloat();
 			g_liveCharaAutoDressReplace = document["liveCharaAutoDressReplace"].GetBool();
+			g_useExclusiveFullScreen = document["useExclusiveFullScreen"].GetBool();
+			g_exclusiveFullScreenWidth = document["exclusiveFullScreenWidth"].GetInt();
+			g_exclusiveFullScreenHeight = document["exclusiveFullScreenHeight"].GetInt();
 			
 			// Looks like not working for now
 			// g_aspect_ratio = document["customAspectRatio"].GetFloat();
@@ -97,6 +104,9 @@ namespace
 
 				dicts.push_back(dict);
 			}
+		}
+		else {
+			MessageBox(NULL, "Config.json parse error", "Error", MB_OK | MB_ICONERROR);
 		}
 
 		config_stream.close();
@@ -125,16 +135,19 @@ int __stdcall DllMain(HINSTANCE, DWORD reason, LPVOID)
 
 		auto dicts = read_config();
 
-		if(g_enable_console)
-		 	create_debug_console();
-
 		
+		create_debug_console();
+	
+			
 
 		std::thread init_thread([dicts]() {
 			logger::init_logger();
 			local::load_textdb(&dicts);
 			init_hook();
-		});
+
+			if (g_enable_console)
+				start_console();
+			});
 		init_thread.detach();
 	}
 	else if (reason == DLL_PROCESS_DETACH)

@@ -99,4 +99,10 @@ namespace local
 
 		return str;
 	}
+
+	void reload_textdb(const vector<string>* dicts)
+	{
+		text_db.clear();
+		load_textdb(dicts);
+	}
 }

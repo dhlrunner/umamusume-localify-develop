@@ -20,6 +20,7 @@ using namespace std;
 
 namespace
 {
+	int currentRefreshRate = g_max_fps;
 	int race_Currentrank = 0;
 	int race_MaxRank = 0;
 	bool isLiveStartFlag = false;
@@ -121,7 +122,7 @@ namespace
 
 		printf("\n\n");
 	}
-
+	int (*ObscuredInt_Decrypted)(ObscuredInt*) = nullptr;
 	void* load_library_w_orig = nullptr;
 	HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 	{
@@ -140,11 +141,11 @@ namespace
 				ga = nullptr;
 			}
 			
-			//HMODULE sq = GetModuleHandle("libnative.dll");
+			//HMODULE sq = GetModuleHandle("UnityPlayer.dll");
 			//if (sq != nullptr) {
 			//	//std::string exe_name = module_filename(NULL);
-			//	printf("Trying to dump LibNative.Runtime.dll...\n");
-			//	pedump(sq, "dumped_LibNative.Runtime.dll");
+			//	printf("Trying to dump cri_ware_unity.dll...\n");
+			//	pedump(sq, "dumped_cri_ware_unity.dll");
 			//}
 			//sq = nullptr;
 			path_game_assembly();
@@ -228,52 +229,45 @@ namespace
 	void set_fps_hook(int value)
 	{
 		if (g_autofps) {
-			int hz = getCurrentDisplayHz();
-			printf("Auto fps limit setted : %d fps\n",hz+1);
-			return reinterpret_cast<decltype(set_fps_hook)*>(set_fps_orig)((int)hz+1);
+			currentRefreshRate = getCurrentDisplayHz();
+			printf("Auto fps limit setted : %d fps\n", currentRefreshRate);
+			return reinterpret_cast<decltype(set_fps_hook)*>(set_fps_orig)(currentRefreshRate);
 		}
 		else {
-			return reinterpret_cast<decltype(set_fps_hook)*>(set_fps_orig)(g_max_fps);
+			printf("fps limit setted : %d fps\n", currentRefreshRate);
+			return reinterpret_cast<decltype(set_fps_hook)*>(set_fps_orig)(currentRefreshRate);
 		}
 		
 	}
 
-	void* set_animefps_orig = nullptr;
-	void set_animefps_hook(float val)
-	{
-		return reinterpret_cast<decltype(set_animefps_hook)*>(set_animefps_orig)(0.0);
-	}
-
 	
-
-	
-	void* live_CameraLookAt_UpdateCamera_orig = nullptr;
+	/*void* live_CameraLookAt_UpdateCamera_orig = nullptr;
 	void live_CameraLookAt_UpdateCamera_hook(void* _this) {
 		printf("UpdateCamera Called\n");
 		return reinterpret_cast<decltype(live_CameraLookAt_UpdateCamera_hook)*>
 			(live_CameraLookAt_UpdateCamera_orig)(_this);
-	}
+	}*/
 
-	void* live_Cutt_LiveTimelineControl_GetCameraPos_orig = nullptr;
+	/*void* live_Cutt_LiveTimelineControl_GetCameraPos_orig = nullptr;
 	Vector3_t* live_Cutt_LiveTimelineControl_GetCameraPos_hook(int index) {
 		auto pos = reinterpret_cast<decltype(live_Cutt_LiveTimelineControl_GetCameraPos_hook)*>(live_Cutt_LiveTimelineControl_GetCameraPos_orig)(index);
 		printf("Charaid: %d, Cam: x=%.2f, y=%.2f, z=%.2f\n", index, pos->x, pos->y, pos->z);
 		return pos;
-	}
+	}*/
 
-	void* live_Cutt_LiveTimelineControl_set_liveStageCenterPos_orig = nullptr;
+	/*void* live_Cutt_LiveTimelineControl_set_liveStageCenterPos_orig = nullptr;
 	void live_Cutt_LiveTimelineControl_set_liveStageCenterPos_hook(Vector3_t* value) {
 		printf("set_liveStageCenterPos: x=%.2f, y=%.2f, z=%.2f\n", value->x, value->y, value->z);
 		return reinterpret_cast<decltype(live_Cutt_LiveTimelineControl_set_liveStageCenterPos_hook)*>
 			(live_Cutt_LiveTimelineControl_set_liveStageCenterPos_orig)(value);
-	}
+	}*/
 
-	void* live_cam_GetCullingMask_orig = nullptr;
-	unsigned int live_cam_GetCullingMask_hook(unsigned int val) {
-		//printf("cam %d\n", val);		
-		return reinterpret_cast<decltype(live_cam_GetCullingMask_hook)*>(live_cam_GetCullingMask_orig)(val);
-		//return 511;
-	}
+	//void* live_cam_GetCullingMask_orig = nullptr;
+	//unsigned int live_cam_GetCullingMask_hook(unsigned int val) {
+	//	//printf("cam %d\n", val);		
+	//	return reinterpret_cast<decltype(live_cam_GetCullingMask_hook)*>(live_cam_GetCullingMask_orig)(val);
+	//	//return 511;
+	//}
 
 	void* AssetBundleHelper_GetResourceVer_orig = nullptr;
 	Il2CppString* AssetBundleHelper_GetResourceVer_hook() {
@@ -318,7 +312,7 @@ namespace
 	void* LiveTitleController_Setup_orig = nullptr;
 	void LiveTitleController_Setup_hook(void* _this, LiveData* livedata, bool isAdjustForDialog = false){
 		//wprintf(L"%s", std::wstring(title->start_char).c_str());
-		printf("LiveTitle_Setup: [%d]\n", livedata->LiveMemberNumber);
+		printf("LiveTitle_Setup: [MusicID=%d, LiveMemberNumber=%d]\n", livedata->MusicId,livedata->LiveMemberNumber);
 		return reinterpret_cast<decltype(LiveTitleController_Setup_hook)*>
 			(LiveTitleController_Setup_orig)(_this, livedata,isAdjustForDialog);
 	}
@@ -342,12 +336,12 @@ namespace
 		return;
 	}
 
-	void* Unity_Post_orig = nullptr;
-	void* Unity_Post_hook(Il2CppString* Uri, void* stuff) {
-		wprintf(L"%s\n", std::wstring(Uri->start_char).c_str());
-		return reinterpret_cast<decltype(Unity_Post_hook)*>
-			(Unity_Post_orig)(Uri, stuff);
-	}
+	//void* Unity_Post_orig = nullptr;
+	//void* Unity_Post_hook(Il2CppString* Uri, void* stuff) {
+	//	wprintf(L"%s\n", std::wstring(Uri->start_char).c_str());
+	//	return reinterpret_cast<decltype(Unity_Post_hook)*>
+	//		(Unity_Post_orig)(Uri, stuff);
+	//}
 
 	void* RaceUI_SetRaceUIActive_orig = nullptr;
 	void RaceUI_SetRaceUIActive_hook(void* _this, bool active) {
@@ -426,6 +420,31 @@ namespace
 		return;
 	}
 
+	void* ModelLoader_CreateNormalModel_orig = nullptr;
+	void* ModelLoader_CreateNormalModel_hook(void* _this, CharacterBuildInfo* charinfo) {
+		printf("CreateNormalModel Cardinfo->charaid=%d, dresssubHeadid=%d\n", charinfo->dummy1,charinfo->_dressElement->HeadSubId);
+		/*charinfo->_charaId = 1002;
+		charinfo->_dressId = 9;
+		charinfo->_dressElement->CharaId = 9;*/
+		return reinterpret_cast<decltype(ModelLoader_CreateNormalModel_hook)*>
+			(ModelLoader_CreateNormalModel_orig)(_this,charinfo);
+	}
+
+	void* ModelLoader_CreateModel_orig = nullptr;
+	void* ModelLoader_CreateModel_hook(CharacterBuildInfo* charinfo) {
+		wprintf(L"CreateModel charinfo->charaid=%d, HeadModelSubid=%d, dressid=%d ,DressElement.charaid=%d,DressElement.id=%d,DressElement.UseLiveTheater=%d, Name=%s, bust=%d , isPd=%d\n",
+			charinfo->_charaId, charinfo->_headModelSubId,charinfo->_dressId,charinfo->_dressElement->CharaId, charinfo->_dressElement->Id, charinfo->_dressElement->UseLiveTheater,
+			std::wstring(charinfo->_name->start_char).c_str(),charinfo->_bustType,charinfo->_isPersonalDress);
+		/*charinfo->_charaId = 1002;
+		charinfo->_dressId = 9;
+		charinfo->_dressElement->CharaId = 9;*/
+		/*if (charinfo->_charaId == 9005) {
+			charinfo->_headModelSubId = -1;
+		}*/
+		return reinterpret_cast<decltype(ModelLoader_CreateModel_hook)*>
+			(ModelLoader_CreateModel_orig)(charinfo);
+	}
+
 	void* BitmapTextCommon_GetFontPath_orig = nullptr;
 	Il2CppString* BitmapTextCommon_GetFontPath_hook(void* _this,void* fontType) {
 		auto path = reinterpret_cast<decltype(BitmapTextCommon_GetFontPath_hook)*>
@@ -433,6 +452,8 @@ namespace
 		wprintf(L"FontPath=%s\n", std::wstring(path->start_char).c_str());
 		return path;
 	}
+
+	
 
 
 	/*void* Race_GetRankNumSmallPath_orig = nullptr;
@@ -454,6 +475,7 @@ namespace
 	}*/
 
 	bool (*is_virt)() = nullptr;
+	void (*setExclusiveFullScreen)(int,int,int,int) = nullptr;
 	int last_height = 0, last_width = 0;
 
 	void* wndproc_orig = nullptr;
@@ -537,11 +559,22 @@ namespace
 
 	Resolution_t* (*get_resolution)(Resolution_t* buffer);
 
+	void get_resolution_stub(Resolution_t* r)
+	{
+		*r = *get_resolution(r);
+
+		int width = min(r->height, r->width) * g_aspect_ratio;
+		if (r->width > r->height)
+			r->width = width;
+		else
+			r->height = width;
+	}
+
 	void* gallop_get_screenheight_orig;
 	int gallop_get_screenheight_hook()
 	{
 		Resolution_t res;
-		res = *get_resolution(&res);
+		get_resolution_stub(&res);
 
 		int w = max(res.width, res.height), h = min(res.width, res.height);
 
@@ -552,7 +585,7 @@ namespace
 	int gallop_get_screenwidth_hook()
 	{
 		Resolution_t res;
-		res = *get_resolution(&res);
+		get_resolution_stub(&res);
 
 		int w = max(res.width, res.height), h = min(res.width, res.height);
 
@@ -565,7 +598,7 @@ namespace
 	void canvas_scaler_setres_hook(void* _this, Vector2_t res)
 	{
 		Resolution_t r;
-		r = *get_resolution(&r);
+		get_resolution_stub(&r);
 
 		// set scale factor to make ui bigger on hi-res screen
 		set_scale_factor(_this, max(1.0f, r.width / 1920.f) * g_ui_scale);
@@ -599,7 +632,7 @@ namespace
 	{
 		Resolution_t r;
 		r = *get_resolution(&r);
-
+		
 		bool need_fullscreen = false;
 
 		if (is_virt() && r.width / static_cast<double>(r.height) == (9.0 / 16.0))
@@ -607,9 +640,33 @@ namespace
 		else if (!is_virt() && r.width / static_cast<double>(r.height) == (16.0 / 9.0))
 			need_fullscreen = true;
 
-		return reinterpret_cast<decltype(set_resolution_hook)*>(set_resolution_orig)(
-			need_fullscreen ? r.width : width, need_fullscreen ? r.height : height, need_fullscreen
-		);
+		
+		
+		if (need_fullscreen) {
+			if (g_useExclusiveFullScreen) {
+				if (g_exclusiveFullScreenWidth > 0 && g_exclusiveFullScreenHeight > 0) {
+					setExclusiveFullScreen(g_exclusiveFullScreenWidth, g_exclusiveFullScreenHeight, ExclusiveFullScreen, currentRefreshRate);
+				}
+				else {
+					setExclusiveFullScreen(r.width, r.height, ExclusiveFullScreen, currentRefreshRate);
+				}
+				
+			}
+			else {
+				return reinterpret_cast<decltype(set_resolution_hook)*>(set_resolution_orig)(
+					r.width, r.height, true
+				);
+			}
+		}
+		else {
+			return reinterpret_cast<decltype(set_resolution_hook)*>(set_resolution_orig)(
+				width, height, false
+			);			
+		}
+		
+		
+		//setExclusiveFullScreen(need_fullscreen ? 3840 : width, need_fullscreen ? 2160 : height, screenmode, currentRefreshRate);
+		
 	}
 
 	void adjust_size()
@@ -628,13 +685,32 @@ namespace
 		}).detach();
 	}
 
+	void* load_scene_internal_orig = nullptr;
+	void* load_scene_internal_hook(Il2CppString* sceneName, int sceneBuildIndex, void* parameters, bool mustCompleteNextFrame)
+	{
+		wprintf(L"%s\n", sceneName->start_char);
+		return reinterpret_cast<decltype(load_scene_internal_hook)*>(load_scene_internal_orig)(sceneName, sceneBuildIndex, parameters, mustCompleteNextFrame);
+	}
+
+
 	void dump_all_entries()
 	{
-		// TextId 0 - 0xA55, 0 is None
-		for (int i = 1; i <= 0xA55; ++i)
+		// 0 is None
+		for (int i = 1;; i++)
 		{
-			auto entry = reinterpret_cast<decltype(localize_get_hook)*>(localize_get_orig)(i);
-			logger::write_entry(i, entry->start_char);
+			auto* str = reinterpret_cast<decltype(localize_get_hook)*>(localize_get_orig)(i);
+
+			if (str && *str->start_char)
+			{
+				logger::write_entry(i, str->start_char);
+			}
+			else
+			{
+				// check next string, if it's still empty, then we are done!
+				auto* nextStr = reinterpret_cast<decltype(localize_get_hook)*>(localize_get_orig)(i + 1);
+				if (!(nextStr && *nextStr->start_char))
+					break;
+			}
 		}
 	}
 
@@ -658,9 +734,7 @@ namespace
 	dump_bytes(_name_##_offset); \
 	\
 	MH_CreateHook(_name_##_offset, _name_##_hook, &_name_##_orig); \
-	MH_EnableHook(_name_##_offset); \
-	\
-	enabled_hooks.push_back(_name_##_offset)
+	MH_EnableHook(_name_##_offset); 
 #pragma endregion
 #pragma region HOOK_ADDRESSES
 		auto populate_with_errors_addr = il2cpp_symbols::get_method_pointer(
@@ -694,11 +768,6 @@ namespace
 		auto set_fps_addr = il2cpp_symbols::get_method_pointer(
 			"UnityEngine.CoreModule.dll", "UnityEngine",
 			"Application", "set_targetFrameRate", 1
-		);
-
-		auto set_animefps_addr = il2cpp_symbols::get_method_pointer(
-			"UnityEngine.AnimationModule.dll", "UnityEngine",
-			"AnimationClip", "set_frameRate", 1
 		);
 
 		auto wndproc_addr = il2cpp_symbols::get_method_pointer(
@@ -808,7 +877,14 @@ namespace
 			"Screen", "SetResolution", 3
 		);
 
-		auto live_cam_GetCullingMask_addr = reinterpret_cast<unsigned int(*)(unsigned int)>(
+		setExclusiveFullScreen = reinterpret_cast<void(*)(int,int,int,int)>(
+				il2cpp_symbols::get_method_pointer(
+					"UnityEngine.CoreModule.dll", "UnityEngine",
+					"Screen", "SetResolution", 4
+				)
+			);
+
+		/*auto live_cam_GetCullingMask_addr = reinterpret_cast<unsigned int(*)(unsigned int)>(
 			il2cpp_symbols::get_method_pointer(
 				"umamusume.dll", "Gallop.Live.Cutt",
 				"LiveCameraCullingLayer_Helper", "GetCullingMask", 1
@@ -828,7 +904,7 @@ namespace
 		auto live_Cutt_LiveTimelineControl_set_liveStageCenterPos_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop.Live.Cutt",
 			"LiveTimelineControl", "set_liveStageCenterPos", 1
-		);
+		);*/
 
 		auto AssetBundleHelper_GetResourceVer_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop",
@@ -865,11 +941,11 @@ namespace
 				"LiveTitleController", "FadeOut", 2
 			));
 
-		auto Unity_Post_addr = reinterpret_cast<void(*)(Il2CppString*,void*)>(
+	/*	auto Unity_Post_addr = reinterpret_cast<void(*)(Il2CppString*,void*)>(
 			il2cpp_symbols::get_method_pointer(
 				"UnityEngine.UnityWebRequestModule.dll", "UnityEngine.Networking",
 				"UnityWebRequest", "Post", 2
-			));
+			));*/
 
 		auto RaceUI_SetRaceUIActive_addr = reinterpret_cast<void(*)(void*,bool)>(
 			il2cpp_symbols::get_method_pointer(
@@ -931,6 +1007,26 @@ namespace
 				"BitmapTextCommon", "GetFontPath", 1
 			));
 
+		auto ModelLoader_CreateNormalModel_addr = reinterpret_cast<void*(*)(void*,CharacterBuildInfo* )>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"ModelLoader", "CreateNormalModel", 1
+			));
+
+		auto ModelLoader_CreateModel_addr = reinterpret_cast<void*(*)(CharacterBuildInfo*)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"ModelLoader", "CreateModel", 1
+			));
+
+		ObscuredInt_Decrypted = reinterpret_cast<int(*)(ObscuredInt*)>(
+			il2cpp_symbols::get_method_pointer(
+				"Plugins.dll", "CodeStage.AntiCheat.ObscuredTypes",
+				"ObscuredInt", "op_Implicit", 1
+			));
+
+		auto load_scene_internal_addr = il2cpp_resolve_icall("UnityEngine.SceneManagement.SceneManager::LoadSceneAsyncNameIndexInternal_Injected(System.String,System.Int32,UnityEngine.SceneManagement.LoadSceneParameters&,System.Boolean)");
+
 		/*auto Race_GetRankNumSmallPath_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop.AtlasSpritePath",
 			"Race", "GetRankNumSmallPath", 1
@@ -953,18 +1049,17 @@ namespace
 		ADD_HOOK(query_ctor, "Query::ctor at %p\n");
 		ADD_HOOK(query_getstr, "Query::GetString at %p\n");
 		ADD_HOOK(query_dispose, "Query::Dispose at %p\n");
-		ADD_HOOK(set_animefps, "UnityEngine.AnimationClip.set_frameRate at %p \n");
-		ADD_HOOK(live_cam_GetCullingMask, "Gallop.Live.Cutt.LiveCameraCullingLayer_Helper.GetCullingMask(uint) at %p\n");
-		ADD_HOOK(live_CameraLookAt_UpdateCamera, "Gallop.Live.CameraLookAt.UpdateCamera(longlong) at %p \n");
-		ADD_HOOK(live_Cutt_LiveTimelineControl_GetCameraPos, "Gallop.Live.Cutt.LiveTimelineControl.GetCameraPos(int) at %p\n");
-		ADD_HOOK(live_Cutt_LiveTimelineControl_set_liveStageCenterPos, "Gallop.Live.Cutt.LiveTimelineControl.set_liveStageCenterPos(Vector3) at %p\n");
+		//ADD_HOOK(live_cam_GetCullingMask, "Gallop.Live.Cutt.LiveCameraCullingLayer_Helper.GetCullingMask(uint) at %p\n");
+		//ADD_HOOK(live_CameraLookAt_UpdateCamera, "Gallop.Live.CameraLookAt.UpdateCamera(longlong) at %p \n");
+		//ADD_HOOK(live_Cutt_LiveTimelineControl_GetCameraPos, "Gallop.Live.Cutt.LiveTimelineControl.GetCameraPos(int) at %p\n");
+		//ADD_HOOK(live_Cutt_LiveTimelineControl_set_liveStageCenterPos, "Gallop.Live.Cutt.LiveTimelineControl.set_liveStageCenterPos(Vector3) at %p\n");
 		ADD_HOOK(AssetBundleHelper_GetResourceVer, "Gallop.AssetBundleHelper.GetResourceVer() at %p\n");
 		ADD_HOOK(GachaBGController_OverrideRarity, "Gallop.GachaBGController.OverrideRarity(int, int(enum)) at %p\n");
 		ADD_HOOK(GachaBGController_SetGateDoorRarity, "Gallop.GachaBGController.SetRarity(int) at %p\n");
 		ADD_HOOK(LiveTitleController_Setup, "Gallop.Live.LiveTitleController.Setup at %p\n");
 		ADD_HOOK(LiveTitleController_FadeIn, "Gallop.Live.LiveTitleController.FadeIn(float,float) at %p\n");
 		ADD_HOOK(LiveTitleController_FadeOut, "Gallop.Live.LiveTitleController.FadeOut(float,float) at %p\n");
-		ADD_HOOK(Unity_Post, "Unity_Post at %p\n");
+		//ADD_HOOK(Unity_Post, "Unity_Post at %p\n");
 		ADD_HOOK(RaceUI_SetRaceUIActive, "RaceUI.SetRaceUIActive(bool) at %p\n");
 		ADD_HOOK(RaceUI_SetVisibleRank, "RaceUI.SetVisibleRank(bool) at %p\n");
 		ADD_HOOK(RaceUIRank_Setup, "RaceUIRank.Setup(7) at %p\n");
@@ -974,7 +1069,10 @@ namespace
 		ADD_HOOK(LiveTheaterInfo_GetDefaultDressid, "LiveTheaterInfo_GetDefaultDressid(...) at %p");
 		ADD_HOOK(LiveTheaterInfo_UpdateCharaDressIds, "LiveTheaterInfo_UpdateCharaDressIds(LiveTheaterMemberInfo[]) at %p");
 		ADD_HOOK(LiveTheaterInfo_CheckDress, "LiveTheaterInfo_CheckDress(int,CharaDressIdSet) at %p");
-		ADD_HOOK(BitmapTextCommon_GetFontPath, "BitmapTextCommon_GetFontPath(TextFormat.BitmapFont) at %p");
+		//ADD_HOOK(BitmapTextCommon_GetFontPath, "BitmapTextCommon_GetFontPath(TextFormat.BitmapFont) at %p");
+		//ADD_HOOK(ModelLoader_CreateNormalModel, "ModelLoader_CreateNormalModel(CharacterBuildInfo) at %p");
+		//ADD_HOOK(ModelLoader_CreateModel, "ModelLoader_CreateModel(CharacterBuildInfo) at %p");
+
 		//ADD_HOOK(Race_GetRankNumSmallPath, "AtlasSpritePath.Race.GetRankNumSmallPath(int) at %p");
 		//ADD_HOOK(GachaBGController_GateDoor_SetRarity, "Gallop.GachaBGController.GateDoor.SetRarity(int(enum)) at %p\n");
 		if (g_replace_font)
@@ -1005,6 +1103,7 @@ namespace
 		if (g_auto_fullscreen)
 		{
 			ADD_HOOK(set_resolution, "UnityEngine.Screen.SetResolution(int, int, bool) at %p\n");
+			//ADD_HOOK(setExclusiveFullScreen, "UnityEngine.Screen.SetResolution(int, int, int(enum),int) at %p\n");
 			adjust_size();
 		}
 		

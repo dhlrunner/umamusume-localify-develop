@@ -1,5 +1,13 @@
 #pragma once
 
+
+enum FullScreenMode {
+	ExclusiveFullScreen,
+	FullScreenWindow,
+	MaximizedWindow,
+	Windowed
+};
+
 // UnityEngine.Color
 struct Color_t
 {
@@ -199,9 +207,19 @@ typedef struct Il2CppArraySize
 
 static const size_t kIl2CppSizeOfArray = (offsetof(Il2CppArraySize, vector));
 
+//CodeStage.AntiCheat.ObscuredTypes.ObscuredInt
+struct ObscuredInt {
+	int32_t currentCryptoKey;
+	int32_t hiddenValue;
+	bool inited;
+	int32_t fakeValue;
+	bool fakeValueActive;
+};
+
 //Gallop.MasterLiveData.LiveData
 struct __declspec(align(8)) LiveData {
 public:
+	char dummy[0x10];
 	int32_t MusicId;
 	int32_t Sort;
 	int32_t MusicType;
@@ -227,6 +245,9 @@ public:
 
 //Gallop.LiveTheaterMemberInfo
 struct __declspec(align(8)) LiveTheaterMemberInfo {
+public:
+	long dummy1;
+	long dummy2;
 	int32_t chara_id;
 	int32_t mob_id;
 	int32_t dress_id;
@@ -237,10 +258,14 @@ struct __declspec(align(8)) LiveTheaterMemberInfo {
 
 //Gallop.CharaDressIdSet
 struct __declspec(align(8)) CharaDressIdSet {
+public:
+	long dummy1;
+	long dummy2;
 	bool _IsMob_k__BackingField;
 	int32_t _DressColorId_k__BackingField;
 	int32_t _DressColorId2_k__BackingField;
-	struct System_Func_int__o* _getRandomMob;
+	//struct System_Func_int__o* _getRandomMob;
+	int dummy3;
 	int32_t _charaId;
 	int32_t _dressId;
 	int32_t _dressId2;
@@ -248,6 +273,7 @@ struct __declspec(align(8)) CharaDressIdSet {
 
 //Gallop.MobBuildInfo
 struct MobBuildInfo {
+public:
 	int32_t faceKindId;
 	int32_t hairKindId;
 	int32_t hairColorId;
@@ -256,56 +282,11 @@ struct MobBuildInfo {
 	int32_t AttachmentModelId;
 };
 
-//Gallop.CharacterBuildInfo
-struct __declspec(align(8)) CharacterBuildInfo {
-	int32_t _cardId;
-	int32_t _charaId;
-	int32_t _mobId;
-	int32_t _headModelSubId;
-	bool _isUseDressDataHeadModelSubId;
-	int32_t _bodyModelSubId;
-	int32_t _dressId;
-	int32_t _controllerType;
-	int32_t _zekken;
-	struct System_String_o* _name;
-	int32_t _genderType;
-	int32_t _heightType;
-	int32_t _bodySize;
-	int32_t _bustType;
-	float _height;
-	int32_t _skinType;
-	int32_t _socksType;
-	int32_t _defaultPersonalityType;
-	int32_t _raceGateInPersonalityType;
-	int32_t _raceRunPersonalityType;
-	int32_t _raceOverRunPersonalityType;
-	int32_t _raceRunningType;
-	int32_t _zekkenColor;
-	int32_t _zekkenFontColor;
-	int32_t _zekkenFontStyle;
-	struct UnityEngine_Texture_array* _wetTextureArray;
-	struct UnityEngine_Texture_array* _dirtTextureArray;
-	struct UnityEngine_GameObject_o* _sweatLocator;
-	struct UnityEngine_GameObject_o* _sweatObject;
-	int32_t _frameColor;
-	int32_t _popularity;
-	int32_t _npcType;
-	struct Gallop_CharacterBuildPathInfo_o* _charaBuildPathInfo;
-	struct Gallop_ClothBuildPathInfo_o* _clothBuildPathInfo;
-	MasterDressData* _dressElement;
-	int32_t _backDancerColorId;
-	struct MobBuildInfo _mobInfo;
-	bool _isPersonalDress;
-	int32_t _miniMobTailId;
-	int32_t _miniMobParentCharaId;
-	int32_t _overrideClothCategory;
-	int32_t _loadHashKey;
-	bool _isPreCreatedLoadHashKey;
-	bool _initialized;
-};
-
 //Gallop.MasterDressData
 struct __declspec(align(8)) MasterDressData {
+public:
+	//long dummy1;
+	//long dummy2;
 	int32_t Id;
 	int32_t ConditionType;
 	bool HaveMini;
@@ -332,6 +313,76 @@ struct __declspec(align(8)) MasterDressData {
 	int64_t StartTime;
 	int64_t EndTime;
 	int32_t _getCondition;
+};
+
+
+//Gallop.CharacterBuildInfo
+struct __declspec(align(8)) CharacterBuildInfo {
+public:
+	int dummy1;
+	int dummy2;
+	int dummy3;
+	int dummy4;
+	int32_t _cardId;
+	int32_t _charaId;
+	int32_t _mobId;
+	int32_t _headModelSubId;
+	bool _isUseDressDataHeadModelSubId;
+	int32_t _bodyModelSubId;
+	int32_t _dressId;
+	int32_t _controllerType;
+	int32_t _zekken;
+	int dummy5;
+	Il2CppString* _name;
+	int32_t _genderType;
+	int32_t _heightType;
+	int32_t _bodySize;
+	int32_t _bustType;
+	float _height;
+	int32_t _skinType;
+	int32_t _socksType;
+	int32_t _defaultPersonalityType;
+	int32_t _raceGateInPersonalityType;
+	int32_t _raceRunPersonalityType;
+	int32_t _raceOverRunPersonalityType;
+	int32_t _raceRunningType;
+	int32_t _zekkenColor;
+	int32_t _zekkenFontColor;
+	int32_t _zekkenFontStyle;
+	void* _wetTextureArray;
+	void* _dirtTextureArray;
+	void* _sweatLocator;
+	void* _sweatObject;
+
+	int32_t _frameColor;
+	int32_t _popularity;
+	int32_t _npcType;
+	void* _charaBuildPathInfo;
+	void* _clothBuildPathInfo;
+	MasterDressData* _dressElement;
+	int32_t _backDancerColorId;
+	struct MobBuildInfo _mobInfo;
+	bool _isPersonalDress;
+	int32_t _miniMobTailId;
+	int32_t _miniMobParentCharaId;
+	int32_t _overrideClothCategory;
+	int32_t _loadHashKey;
+	bool _isPreCreatedLoadHashKey;
+	bool _initialized;
+};
+
+
+
+
+template<typename T>
+struct Nullable
+{
+	T value;
+	bool has_value;
+
+	bool HasValue() const { return has_value; }
+	const T& GetValue() const { return value; }
+	void SetValue(T& newValue) { value = newValue; }
 };
 
 //LibNative.Sqlite3
