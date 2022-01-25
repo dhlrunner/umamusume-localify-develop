@@ -114,6 +114,8 @@
     <ClInclude Include="..\src\lz4\xxhash.h" />
     <ClInclude Include="..\src\PEDump\PEDump.h" />
     <ClInclude Include="..\src\stdinclude.hpp" />
+    <ClInclude Include="..\src\string.hpp" />
+    <ClInclude Include="..\src\url.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\console.cpp" />
@@ -128,6 +130,7 @@
     <ClCompile Include="..\src\lz4\xxhash.c" />
     <ClCompile Include="..\src\main.cpp" />
     <ClCompile Include="..\src\PEDump\PEDump.cpp" />
+    <ClCompile Include="..\src\url.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\src\dllproxy\version.def" />

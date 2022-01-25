@@ -50,6 +50,8 @@
     <ClInclude Include="..\src\PEDump\PEDump.h">
       <Filter>PEDump</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\string.hpp" />
+    <ClInclude Include="..\src\url.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\console.cpp" />
@@ -82,6 +84,7 @@
     <ClCompile Include="..\src\PEDump\PEDump.cpp">
       <Filter>PEDump</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\url.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\src\dllproxy\version.def">

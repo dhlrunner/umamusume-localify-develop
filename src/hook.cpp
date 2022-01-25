@@ -20,7 +20,6 @@ using namespace std;
 
 namespace
 {
-	int currentRefreshRate = g_max_fps;
 	int race_Currentrank = 0;
 	int race_MaxRank = 0;
 	bool isLiveStartFlag = false;
@@ -229,13 +228,13 @@ namespace
 	void set_fps_hook(int value)
 	{
 		if (g_autofps) {
-			currentRefreshRate = getCurrentDisplayHz();
-			printf("Auto fps limit setted : %d fps\n", currentRefreshRate);
-			return reinterpret_cast<decltype(set_fps_hook)*>(set_fps_orig)(currentRefreshRate);
+			g_max_fps = getCurrentDisplayHz();
+			printf("Auto fps limit setted : %d fps\n", g_max_fps);
+			return reinterpret_cast<decltype(set_fps_hook)*>(set_fps_orig)(g_max_fps);
 		}
 		else {
-			printf("fps limit setted : %d fps\n", currentRefreshRate);
-			return reinterpret_cast<decltype(set_fps_hook)*>(set_fps_orig)(currentRefreshRate);
+			printf("fps limit setted : %d fps\n", g_max_fps);
+			return reinterpret_cast<decltype(set_fps_hook)*>(set_fps_orig)(g_max_fps);
 		}
 		
 	}
@@ -445,13 +444,37 @@ namespace
 			(ModelLoader_CreateModel_orig)(charinfo);
 	}
 
-	void* BitmapTextCommon_GetFontPath_orig = nullptr;
+
+	void* Cute_Http_WWWRequest_Post_orig = nullptr;
+	void Cute_Http_WWWRequest_Post_hook(void* _this,Il2CppString* url, char* postdata, void* headers) {
+		wprintf(L"Original URL: %s\n", url->start_char);
+
+		
+		wstring url_raw = wstring(url->start_char);
+		string url_conv;
+		url_conv.assign(url_raw.begin(),url_raw.end());
+
+		Url posturl(url_conv);
+		Url replaceUrl(g_customHost);
+		posturl.scheme(replaceUrl.scheme());
+		posturl.host(replaceUrl.host());
+		posturl.port(replaceUrl.port());
+		//posturl.
+		 
+
+		printf("Replaced URL: %s\n", posturl.str().c_str());
+
+		return reinterpret_cast<decltype(Cute_Http_WWWRequest_Post_hook)*>
+			(Cute_Http_WWWRequest_Post_orig)(_this, il2cpp_string_new(posturl.str().c_str()) ,postdata,headers);
+	}
+
+	/*void* BitmapTextCommon_GetFontPath_orig = nullptr;
 	Il2CppString* BitmapTextCommon_GetFontPath_hook(void* _this,void* fontType) {
 		auto path = reinterpret_cast<decltype(BitmapTextCommon_GetFontPath_hook)*>
 			(BitmapTextCommon_GetFontPath_orig)(_this,fontType);
 		wprintf(L"FontPath=%s\n", std::wstring(path->start_char).c_str());
 		return path;
-	}
+	}*/
 
 	
 
@@ -467,12 +490,12 @@ namespace
 		return str;
 	}*/
 
-	/*void* GachaBGController_GateDoor_SetRarity_orig = nullptr;
+	void* GachaBGController_GateDoor_SetRarity_orig = nullptr;
 	void GachaBGController_GateDoor_SetRarity_hook(void* _this, int e) {
 		printf("[GachaBGController.GateDoor.SetRarity] Raritydoor_Type=%d\n", e);
 		return reinterpret_cast<decltype(GachaBGController_GateDoor_SetRarity_hook)*>
 			(GachaBGController_GateDoor_SetRarity_orig)(_this, e);
-	}*/
+	}
 
 	bool (*is_virt)() = nullptr;
 	void (*setExclusiveFullScreen)(int,int,int,int) = nullptr;
@@ -645,10 +668,10 @@ namespace
 		if (need_fullscreen) {
 			if (g_useExclusiveFullScreen) {
 				if (g_exclusiveFullScreenWidth > 0 && g_exclusiveFullScreenHeight > 0) {
-					setExclusiveFullScreen(g_exclusiveFullScreenWidth, g_exclusiveFullScreenHeight, ExclusiveFullScreen, currentRefreshRate);
+					setExclusiveFullScreen(g_exclusiveFullScreenWidth, g_exclusiveFullScreenHeight, ExclusiveFullScreen, g_max_fps);
 				}
 				else {
-					setExclusiveFullScreen(r.width, r.height, ExclusiveFullScreen, currentRefreshRate);
+					setExclusiveFullScreen(r.width, r.height, ExclusiveFullScreen, g_max_fps);
 				}
 				
 			}
@@ -1027,16 +1050,23 @@ namespace
 
 		auto load_scene_internal_addr = il2cpp_resolve_icall("UnityEngine.SceneManagement.SceneManager::LoadSceneAsyncNameIndexInternal_Injected(System.String,System.Int32,UnityEngine.SceneManagement.LoadSceneParameters&,System.Boolean)");
 
+		auto Cute_Http_WWWRequest_Post_addr = il2cpp_symbols::get_method_pointer(
+			"Cute.Http.Assembly.dll", "Cute.Http",
+			"WWWRequest", "Post", 3
+		);
+
+	//auto GachaBGController_GateDoor_SetRarity_addr = il2cpp_resolve_icall("Gallop.GachaBGController$GateDoor::SetRarity(Gallop.GachaDefine.GachaRarityType_Door)");
+
 		/*auto Race_GetRankNumSmallPath_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop.AtlasSpritePath",
 			"Race", "GetRankNumSmallPath", 1
 		);*/
 
-		/*auto GachaBGController_GateDoor_SetRarity_addr = reinterpret_cast<void(*)(void*, int)>(
+		/*auto GachaBGController_GateDoor_SetRarity_addr =
 			il2cpp_symbols::get_method_pointer(
 				"umamusume.dll", "Gallop",
-				"GachaBGController.GateDoor", "SetRarity", 1
-			));*/
+				"GachaBGController$GateDoor","SetRarity",1
+			);*/
 
 #pragma endregion
 
@@ -1069,6 +1099,11 @@ namespace
 		ADD_HOOK(LiveTheaterInfo_GetDefaultDressid, "LiveTheaterInfo_GetDefaultDressid(...) at %p");
 		ADD_HOOK(LiveTheaterInfo_UpdateCharaDressIds, "LiveTheaterInfo_UpdateCharaDressIds(LiveTheaterMemberInfo[]) at %p");
 		ADD_HOOK(LiveTheaterInfo_CheckDress, "LiveTheaterInfo_CheckDress(int,CharaDressIdSet) at %p");
+		printf("CustomHost:%s\n",g_customHost);
+		if (strlen(g_customHost) > 0) {
+			ADD_HOOK(Cute_Http_WWWRequest_Post, "Cute_Http_WWWRequest_Post(...) at %p");
+		}
+		
 		//ADD_HOOK(BitmapTextCommon_GetFontPath, "BitmapTextCommon_GetFontPath(TextFormat.BitmapFont) at %p");
 		//ADD_HOOK(ModelLoader_CreateNormalModel, "ModelLoader_CreateNormalModel(CharacterBuildInfo) at %p");
 		//ADD_HOOK(ModelLoader_CreateModel, "ModelLoader_CreateModel(CharacterBuildInfo) at %p");

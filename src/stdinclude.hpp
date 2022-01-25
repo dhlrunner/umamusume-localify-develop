@@ -32,6 +32,7 @@
 #include "local/local.hpp"
 #include "logger/logger.hpp"
 #include "PEDump.h"
+#include "url.hpp"
 
 #include <httplib.h>
 #include <psapi.h>
@@ -61,3 +62,4 @@ extern bool g_liveCharaAutoDressReplace;
 extern bool g_useExclusiveFullScreen;
 extern int g_exclusiveFullScreenWidth;
 extern int g_exclusiveFullScreenHeight;
+extern char* g_customHost;

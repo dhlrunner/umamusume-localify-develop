@@ -8,7 +8,7 @@ extern void start_console();
 bool g_dump_entries = false;
 bool g_enable_logger = false;
 bool g_enable_console = false;
-bool	 g_autofps = false;
+bool g_autofps = false;
 int g_max_fps = -1;
 bool g_unlock_size = false;
 float g_ui_scale = 1.0f;
@@ -26,6 +26,7 @@ bool g_liveCharaAutoDressReplace = false;
 bool g_useExclusiveFullScreen = false;
 int g_exclusiveFullScreenWidth = 1920;
 int g_exclusiveFullScreenHeight = 1080;
+char* g_customHost;
 
 namespace
 {
@@ -91,6 +92,9 @@ namespace
 			g_useExclusiveFullScreen = document["useExclusiveFullScreen"].GetBool();
 			g_exclusiveFullScreenWidth = document["exclusiveFullScreenWidth"].GetInt();
 			g_exclusiveFullScreenHeight = document["exclusiveFullScreenHeight"].GetInt();
+			const char* d = document["customHost"].GetString();
+			g_customHost = new char[strlen(d)+1];
+			strcpy(g_customHost, d);
 			
 			// Looks like not working for now
 			// g_aspect_ratio = document["customAspectRatio"].GetFloat();
