@@ -22,7 +22,7 @@
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>NotSet</CharacterSet>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
@@ -66,7 +66,7 @@
       <MinimalRebuild>false</MinimalRebuild>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalOptions>/std:c++latest %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/std:c++latest /Zm1000 %(AdditionalOptions)</AdditionalOptions>
       <AdditionalIncludeDirectories>..\src\PEDump\;..\src\lz4;..\src\;..\deps\rapidjson\include;..\deps\minhook\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
@@ -76,6 +76,10 @@
       <ModuleDefinitionFile>../src/dllproxy/version.def</ModuleDefinitionFile>
       <AdditionalOptions>/SAFESEH:NO %(AdditionalOptions)</AdditionalOptions>
     </Link>
+    <PostBuildEvent>
+      <Command>copy /y "$(TargetPath)" "C:\Users\Administrator\Desktop\My Files\games\umamusume_custom\$(TargetFileName)"
+copy /y "$(TargetPath)" "C:\Users\Administrator\Umamusume\$(TargetFileName)"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>

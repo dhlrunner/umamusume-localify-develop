@@ -56,10 +56,11 @@ namespace il2cpp_symbols
 	uintptr_t get_method_pointer(const char* assemblyName, const char* namespaze,
 								 const char* klassName, const char* name, int argsCount)
 	{
+		patchCount++;
 		auto assembly = il2cpp_domain_assembly_open(il2cpp_domain, assemblyName);
 		auto image = il2cpp_assembly_get_image(assembly);
 		auto klass = il2cpp_class_from_name(image, namespaze, klassName);
-
+		printf("klass=%p, namespace=%s, class=%s, name=%s, argsCount=%d\n", klass,namespaze,klassName,name,argsCount);
 		return il2cpp_class_get_method_from_name(klass, name, argsCount)->methodPointer;
 	}
 

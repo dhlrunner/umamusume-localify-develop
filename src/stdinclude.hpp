@@ -41,6 +41,8 @@
 
 #pragma comment(lib,"ws2_32.lib") //Winsock Library
 
+extern int patchCount;
+
 extern bool g_dump_entries;
 extern bool g_enable_logger;
 extern bool g_enable_console;
@@ -62,4 +64,21 @@ extern bool g_liveCharaAutoDressReplace;
 extern bool g_useExclusiveFullScreen;
 extern int g_exclusiveFullScreenWidth;
 extern int g_exclusiveFullScreenHeight;
+extern char* g_customDataPath;
 extern char* g_customHost;
+extern bool g_skipResourceDownload;
+extern int c_gachaCutinChara;
+extern int c_gachaCutinDress;
+extern int c_gachaCutinHeadid;
+extern bool c_stopLiveCam;
+extern int c_raceResultCutinMotionChara;
+extern int c_raceResultCutinMotionDress;
+extern int c_raceResultCutinMotionGrade;
+extern int c_raceResultCutinMotionRank;
+extern bool c_changeStoryChar;
+extern int c_story3dCharID;
+extern int c_story3dClothID;
+extern int c_story3dMobid;
+extern int c_story3dHeadID;
+
+extern TimelineKeyCharacterType c_gachaCharaType;

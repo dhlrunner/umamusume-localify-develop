@@ -624,7 +624,7 @@ namespace httplib {
         Server& Options(const std::string& pattern, Handler handler);
 
         bool set_base_dir(const std::string& dir,
-            const std::string& mount_point = nullptr);
+            const std::string& mount_point = "");
         bool set_mount_point(const std::string& mount_point, const std::string& dir,
             Headers headers = Headers());
         bool remove_mount_point(const std::string& mount_point);

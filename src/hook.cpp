@@ -1,14 +1,25 @@
-#define _WINSOCK_DEPRECATED_NO_WARNINGS 1
+﻿#define _WINSOCK_DEPRECATED_NO_WARNINGS 1
 #define _CRT_SECURE_NO_WARNINGS 1
 #define MAX_HORSE_NUM 18
 
 #include <stdinclude.hpp>
 
+HWND currenthWnd = NULL;
 bool g_sendserver = true;
 int server_port = 80;
 char server_ip[256];
 DWORD getCurrentDisplayHz();
 void DumpHex(const void* data, size_t size);
+void (*setExclusiveFullScreen)(int, int, int, int) = nullptr;
+void adjust_size(int w = 0, int h=0);
+void set_resolution_hook(int, int, bool);
+void (*sql_query)(Connection* connection, Il2CppString* sql) = nullptr;
+bool (*sql_exec)() = nullptr;
+Connection* masterDBconnection = nullptr;
+Url lastUrl;
+Url currentUrl;
+void startThread();
+
 
 WSADATA wsa;
 SOCKET s;
@@ -18,17 +29,55 @@ struct sockaddr_in server;
 
 using namespace std;
 
-namespace
-{
+
+
+	
 	int race_Currentrank = 0;
 	int race_MaxRank = 0;
 	bool isLiveStartFlag = false;
 	int count = 0;
 	float horseMeters[MAX_HORSE_NUM] = {0.1};
 	float lastMeter = 0.0;
+	bool (*GetKeyDown)(int) = nullptr;
+	void (*TapEffect_Disable)(void*);
+
+	string ReplaceAll(std::string str, const std::string& from, const std::string& to) {
+		size_t start_pos = 0;
+		while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
+			str.replace(start_pos, from.length(), to);
+			start_pos += to.length(); // Handles case where 'to' is a substring of 'from'
+		}
+		return str;
+	}
+
+	std::vector < std::string > explode(const std::string& str,
+		const char& ch) {
+		std::string next;
+		std::vector < std::string > result;
+
+		// For each character in the string
+		for (std::string::const_iterator it = str.begin(); it != str.end(); it++) {
+			// If we've hit the terminal character
+			if (*it == ch) {
+				// If we have some characters accumulated
+				if (!next.empty()) {
+					// Add them to the result vector
+					result.push_back(next);
+					next.clear();
+				}
+			}
+			else {
+				// Accumulate the next character into the sequence
+				next += *it;
+			}
+		}
+		if (!next.empty())
+			result.push_back(next);
+		return result;
+	}
 
 	void meterDataSendThread() {
-		printf("Thread IN!!!\n");
+		printf("meterDataSendThread IN!!!\n");
 		while (true)
 		{
 			//printf("Thread Alive!!\n");
@@ -57,6 +106,21 @@ namespace
 		
 		
 	}
+
+	void keyDownCheckThread() {
+		printf("KeyDownCheckThread IN!!!\n");
+		while (true) {
+			bool ret = GetKeyDown(0x73); //S
+			if (ret) {
+				printf("S is Pressed!!!!\n");
+				while (GetKeyDown(0x73)) { }
+
+				c_stopLiveCam = !c_stopLiveCam;
+				printf("LiveCam Stop %s.\n",c_stopLiveCam ? "Enabled" : "Disabled");
+			}				
+			//std::this_thread::sleep_for(std::chrono::milliseconds(5));
+		}
+	}
 	char* readAllFileBytes(const char* name)
 	{
 		ifstream fl(name);
@@ -67,6 +131,15 @@ namespace
 		fl.read(ret, len);
 		fl.close();
 		return ret;
+	}
+	wstring readFileIntoString(const string& path) {
+		ifstream input_file(path);
+		if (!input_file.is_open()) {
+			cerr << "Could not open the file - '"
+				<< path << "'" << endl;
+			exit(EXIT_FAILURE);
+		}
+		return wstring((std::istreambuf_iterator<char>(input_file)), std::istreambuf_iterator<char>());
 	}
 	bool isSubset(char arr1[], char arr2[],
 		int m, int n)
@@ -125,11 +198,19 @@ namespace
 	void* load_library_w_orig = nullptr;
 	HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 	{
-		
+		wprintf(L"loaded %s\n", path);
 		// GameAssembly.dll code must be loaded and decrypted while loading criware library
-		if (path == L"cri_ware_unity.dll"s)
+		if (path == L"advapi32"s) {
+			path_game_assembly();
+		}
+		else if (path == L"cri_ware_unity.dll"s)
 		{
-			//GameAssembly ����
+			currenthWnd = GetActiveWindow();
+			char buf[100];
+			sprintf_s(buf, "umamusume_cu (%d patch applied)", patchCount);
+
+			SetWindowText(currenthWnd, buf);
+			//GameAssembly ´ýÇÁ
 			if (g_dumpGamedll) {
 				HMODULE ga = GetModuleHandle("GameAssembly.dll");
 				if (ga != nullptr) {
@@ -140,14 +221,14 @@ namespace
 				ga = nullptr;
 			}
 			
-			//HMODULE sq = GetModuleHandle("UnityPlayer.dll");
-			//if (sq != nullptr) {
-			//	//std::string exe_name = module_filename(NULL);
-			//	printf("Trying to dump cri_ware_unity.dll...\n");
-			//	pedump(sq, "dumped_cri_ware_unity.dll");
-			//}
+			HMODULE sq = GetModuleHandle("baselib.dll");
+			if (sq != nullptr) {
+				//std::string exe_name = module_filename(NULL);
+				printf("Trying to dump baselib.dll...\n");
+				pedump(sq, "dumped_baselib.dll");
+			}
 			//sq = nullptr;
-			path_game_assembly();
+			startThread();
 			bootstrap_carrot_juicer();
 			MH_DisableHook(LoadLibraryW);
 			MH_RemoveHook(LoadLibraryW);
@@ -155,8 +236,9 @@ namespace
 			// use original function beacuse we have unhooked that
 			return LoadLibraryW(path);
 			//GetModuleHandle()
+			
 		}
-
+		
 		return reinterpret_cast<decltype(LoadLibraryW)*>(load_library_w_orig)(path);
 	}
 
@@ -180,7 +262,7 @@ namespace
 	std::unordered_map<void*, bool> text_queries;
 
 	void* query_ctor_orig = nullptr;
-	void* query_ctor_hook(void* _this, DBConnection_t* conn, Il2CppString* sql)
+	void* query_ctor_hook(void* _this, Connection* conn, Il2CppString* sql)
 	{
 		auto ssql = std::wstring(sql->start_char);
 
@@ -190,6 +272,21 @@ namespace
 			ssql.find(L"race_jikkyo_message") != std::string::npos ) 
 		{
 			text_queries.emplace(_this, true);
+		}
+
+		//wprintf(L"DBConnection info: Handle=%p dbPath=%s\n",conn->Handle,conn->dbPath->start_char);
+
+		if (masterDBconnection == nullptr && std::wstring(conn->dbPath->start_char).find(L"master.db")) {
+			masterDBconnection = conn;
+			wprintf(L"Set masterDBConnection Handle=%p dbPath=%s\n", conn->Handle, conn->dbPath->start_char);
+			//if (std::filesystem::exists("firstrun.sql")) {
+			//	wstring sqlQuery = readFileIntoString("firstrun.sql");
+			//	//const wchar_t *f_sql = sqlQuery.append(ssql.c_str()).c_str();
+			//	const wchar_t* f_sql = ssql.append(sqlQuery.c_str()).c_str();
+			//	Il2CppString* str = il2cpp_string_new_utf16(f_sql,wcslen(f_sql));
+			//	sql = str;
+			//}
+			//wprintf(L"Excute first sql [%s]\n", wstring(sql->start_char).c_str());
 		}
 		
 		//Il2CppString* handle = (Il2CppString*)conn + 0xcc0;
@@ -201,7 +298,7 @@ namespace
 		
 		//reinterpret_cast<decltype(query_ctor_hook)*>(query_ctor_orig)(_this, conn, il2cpp_string_new_utf16(editsql,wcslen(editsql)));
 		//printf("Text: %s\n", text_queries[0]);
-		return reinterpret_cast<decltype(query_ctor_hook)*>(query_ctor_orig)(_this, conn, sql);
+		return reinterpret_cast<decltype(query_ctor_hook)*>(query_ctor_orig)(_this, conn, sql);	
 	}
 
 	void* query_dispose_orig = nullptr;
@@ -229,13 +326,13 @@ namespace
 	{
 		if (g_autofps) {
 			g_max_fps = getCurrentDisplayHz();
-			printf("Auto fps limit setted : %d fps\n", g_max_fps);
-			return reinterpret_cast<decltype(set_fps_hook)*>(set_fps_orig)(g_max_fps);
+			printf("Auto fps limit setted : %d fps\n", g_max_fps);		
 		}
 		else {
 			printf("fps limit setted : %d fps\n", g_max_fps);
-			return reinterpret_cast<decltype(set_fps_hook)*>(set_fps_orig)(g_max_fps);
 		}
+		value = g_max_fps;
+		return reinterpret_cast<decltype(set_fps_hook)*>(set_fps_orig)(value);
 		
 	}
 
@@ -419,55 +516,222 @@ namespace
 		return;
 	}
 
+	void* (*ModelLoader_CreateMiniModel)(void*,CharacterBuildInfo*);
+
 	void* ModelLoader_CreateNormalModel_orig = nullptr;
 	void* ModelLoader_CreateNormalModel_hook(void* _this, CharacterBuildInfo* charinfo) {
-		printf("CreateNormalModel Cardinfo->charaid=%d, dresssubHeadid=%d\n", charinfo->dummy1,charinfo->_dressElement->HeadSubId);
-		/*charinfo->_charaId = 1002;
-		charinfo->_dressId = 9;
-		charinfo->_dressElement->CharaId = 9;*/
+		wprintf(L"CreateNormalModel charinfo->charaid=%d, Dressdata_HeadSubid=%d ,HeadModelSubid=%d, dressid=%d ,DressElement.charaid=%d,DressElement.id=%d,DressElement.UseLiveTheater=%d, Name=%s, bust=%d , isPd=%d\n",
+			charinfo->_charaId, charinfo->_dressElement->HeadSubId,charinfo->_headModelSubId, charinfo->_dressId, charinfo->_dressElement->CharaId, charinfo->_dressElement->Id, charinfo->_dressElement->UseLiveTheater,
+			std::wstring(charinfo->_name->start_char).c_str(), charinfo->_bustType, charinfo->_isPersonalDress);
+		//charinfo->_charaId = 1002;
+		//charinfo->_dressId = 9;
+		//charinfo->_dressElement->CharaId = 1002;
+		//charinfo->_dressElement->Id = 9;
+		//charinfo->_dressElement->CharaId = 9;
 		return reinterpret_cast<decltype(ModelLoader_CreateNormalModel_hook)*>
 			(ModelLoader_CreateNormalModel_orig)(_this,charinfo);
 	}
 
 	void* ModelLoader_CreateModel_orig = nullptr;
-	void* ModelLoader_CreateModel_hook(CharacterBuildInfo* charinfo) {
-		wprintf(L"CreateModel charinfo->charaid=%d, HeadModelSubid=%d, dressid=%d ,DressElement.charaid=%d,DressElement.id=%d,DressElement.UseLiveTheater=%d, Name=%s, bust=%d , isPd=%d\n",
-			charinfo->_charaId, charinfo->_headModelSubId,charinfo->_dressId,charinfo->_dressElement->CharaId, charinfo->_dressElement->Id, charinfo->_dressElement->UseLiveTheater,
-			std::wstring(charinfo->_name->start_char).c_str(),charinfo->_bustType,charinfo->_isPersonalDress);
-		/*charinfo->_charaId = 1002;
-		charinfo->_dressId = 9;
-		charinfo->_dressElement->CharaId = 9;*/
+	void* ModelLoader_CreateModel_hook(void* _this, CharacterBuildInfo* charinfo) {
+		printf("CreateModel Called \n");
+		/*wprintf(L"CreateModel charinfo->charaid=%d, cardid=%d, HeadModelSubid=%d, dressid=%d ,DressElement.charaid=%d,DressElement.id=%d,DressElement.UseLiveTheater=%d, Name=%s, bust=%d , isPd=%d\n",
+			charinfo->_charaId, charinfo->_cardId,charinfo->_headModelSubId,charinfo->_dressId,charinfo->_dressElement->CharaId, charinfo->_dressElement->Id, charinfo->_dressElement->UseLiveTheater,
+			std::wstring(charinfo->_name->start_char).c_str(),charinfo->_bustType,charinfo->_isPersonalDress);*/
+		//charinfo->_charaId = 1007;
+		//charinfo->_dressId = 9;
+		//charinfo->_dressElement->CharaId = 9;*/
 		/*if (charinfo->_charaId == 9005) {
 			charinfo->_headModelSubId = -1;
 		}*/
-		return reinterpret_cast<decltype(ModelLoader_CreateModel_hook)*>
-			(ModelLoader_CreateModel_orig)(charinfo);
+		void* GameObj = ModelLoader_CreateMiniModel(_this, charinfo);
+		return GameObj;
+		/*return reinterpret_cast<decltype(ModelLoader_CreateModel_hook)*>
+			(ModelLoader_CreateModel_orig)(charinfo);*/
+	}
+
+	void* CharacterBuildInfo_ctor_orig = nullptr;
+	void CharacterBuildInfo_ctor_hook(CharacterBuildInfo* _this, 
+		int charaId, int dressId, int controllerType, int headId = 0, int zekken = 0, 
+		int mobId = 0, int backDancerColorId = -1, bool isUseDressDataHeadModelSubId = true, int audienceId = 0,
+		int motionDressId = -1, bool isEnableModelCache = true) {
+		printf("CharacterBuildInfo_ctor called origcharaid=%d, origdressid=%d, mini=%d\n", charaId, dressId,_this->_miniMobParentCharaId);
+		
+		//if(_this.)
+		if (c_gachaCutinChara > -1) {
+			/*if (charaId == 9001)
+				charaId = 9002;*/
+			//else
+				charaId = c_gachaCutinChara;
+		}
+		if (c_gachaCutinDress > -1) {
+			/*if (dressId == 900101)
+				dressId = 900201;*/
+			//else
+				dressId = c_gachaCutinDress;
+		}
+		if (c_gachaCutinHeadid > -1) {
+			headId = c_gachaCutinHeadid;
+		}
+
+		printf("CharacterBuildInfo_ctor called ccharaid=%d, cdressid=%d\n", charaId, dressId);
+		//charaId = 1070;
+		//dressId = 2;
+		return reinterpret_cast<decltype(CharacterBuildInfo_ctor_hook)*>
+			(CharacterBuildInfo_ctor_orig)(_this,charaId,dressId,controllerType,headId,
+				zekken,mobId,backDancerColorId,isUseDressDataHeadModelSubId, audienceId,
+				motionDressId,isEnableModelCache);
+	}
+
+	void* CharacterBuildInfo_ctor_overload1_orig = nullptr;
+	void CharacterBuildInfo_ctor_overload1_hook(CharacterBuildInfo* src) {
+		printf("CharacterBuildInfo_ctor_overload1 called charaid=%d, dressid=%d\n", src->_charaId, src->_dressId);
+
+		if (c_gachaCutinChara > -1) {
+			src->_charaId = c_gachaCutinChara;
+		}
+		if (c_gachaCutinDress > -1) {
+			src->_dressId = c_gachaCutinDress;
+		}
+		if (c_gachaCutinHeadid > -1) {
+			src->_headModelSubId = c_gachaCutinHeadid;
+		}
+		printf("CharacterBuildInfo_ctor_overload1 called ccharaid=%d, cdressid=%d\n", src->_charaId, src->_dressId);
+		return reinterpret_cast<decltype(CharacterBuildInfo_ctor_overload1_hook)*>
+			(CharacterBuildInfo_ctor_overload1_orig)(src);
+	}
+
+
+	void* CharacterBuildInfo_ctor_overload2_orig = nullptr;
+	void CharacterBuildInfo_ctor_overload2_hook(void* _instance, 
+		int cardId, int charaId, int dressId, int controllerType, 
+		int headId = 0, int zekken = 0, int mobId = 0, int backDancerColorId = -1, 
+		int overrideClothCategory = -1, bool isUseDressDataHeadModelSubId = true,
+		int audienceId = 0, int motionDressId = -1, bool isEnableModelCache = true) {
+		printf("CharacterBuildInfo_ctor2 called origcharaid=%d, origdressid=%d\n", charaId, dressId);
+
+		if (c_gachaCutinChara > -1) {
+			charaId = c_gachaCutinChara;
+		}
+		if (c_gachaCutinDress > -1) {
+			dressId = c_gachaCutinDress;
+		}
+		if (c_gachaCutinHeadid > -1) {
+			headId = c_gachaCutinHeadid;
+		}
+
+		printf("CharacterBuildInfo_ctor2 called ccharaid=%d, cdressid=%d\n", charaId, dressId);
+		return reinterpret_cast<decltype(CharacterBuildInfo_ctor_overload2_hook)*>
+			(CharacterBuildInfo_ctor_overload2_orig)(_instance,cardId, charaId, dressId, controllerType, 
+				headId, zekken, mobId, backDancerColorId,overrideClothCategory, 
+				isUseDressDataHeadModelSubId, audienceId,motionDressId,isEnableModelCache);
+
+	}
+
+
+	int chars[] = {1001,1002,1003,1004,1005,1006,1007,1008,1009,1010,1011,1012,1013,1014,1015,1016,1017,1018,1019,1020,1021,1022,1023,1024,1025,1026,1027};
+	int dress[] = { 100101,100202,100303,100404,100505,1006,1007,1008,1009,1010,1011,1012,1013,1014,1015,1016,1017,1018,1019,1020,1021,1022,1023,1024,1025,1026,1027 };
+	void* StoryCharacter3D_LoadModel_orig = nullptr;
+	void* StoryCharacter3D_LoadModel_hook(int charaId, int cardId, int clothId, int zekkenNumber, int headId, bool isWet, bool isDirt, int mobId, int dressColorId, Il2CppString* zekkenName, int zekkenFontStyle = 1, int color = 3, int fontColor = 1, int suitColor = 0,bool isUseDressDataHeadModelSubId = true, bool useCircleShadow = false) {
+		printf("StoryCharacter3D_LoadModel called charaid=%d, cardid=%d, clothid=%d, headid=%d mobid=%d\n", charaId, cardId,clothId,headId,mobId);
+		/*std::random_device rd;
+		std::mt19937 gen(rd());
+		std::uniform_int_distribution<int> dis(0, 26);
+		charaId = chars[dis(gen)];
+		clothId = 5;
+		headId = 0;
+		printf("%d\n", charaId);*/
+
+		if (c_changeStoryChar) 
+		{
+			if ((c_story3dCharID < 0) || (c_story3dClothID < 0) || (c_story3dHeadID < 0) || (c_story3dMobid < 0))
+			{
+				std::string line;
+				while (true) {
+					try {
+						
+
+						std::cout << "Enter charaid, clothid, headid, mobid: " << line << "\n";
+
+						std::getline(std::cin, line);
+
+						//std::cout <<  "Entered: " << line;
+						std::vector < std::string > arg = explode(line, ' ');
+
+						
+						int _charaId = std::stoi(arg.at(0).c_str());
+						int _dressId = std::stoi(arg.at(1).c_str());
+						int _mobid = std::stoi(arg.at(2).c_str());
+						int _headid = std::stoi(arg.at(3).c_str());
+						
+						charaId = _charaId;
+						clothId = _dressId;
+						mobId = _mobid;
+						headId = _headid;
+
+						printf("story3d set manual %d %d %d %d\n", charaId, clothId, mobId, headId);
+						break;
+					}
+					catch (std::invalid_argument&) {
+						printf("Value Error: please enter number only\n");
+					}
+					catch (std::out_of_range&) {
+						std::cout << "You entered " << line << "\n";
+						printf_s("Argument Error: please enter {CharID} {Dress id} {Mod ID} {Head id}\n");
+					}
+				}
+				
+
+
+				//printf("Enter charaid, clothid, headid, mobid: ");
+
+				//scanf_s("%d %d %d %d", &charaId, &clothId, &headId, &mobId);
+				printf("\n");
+			}
+			else 
+			{
+				charaId = c_story3dCharID;
+				clothId = c_story3dClothID;
+				mobId = c_story3dMobid;
+				headId = c_story3dHeadID;
+				printf("story3d set %d %d %d %d\n", charaId, clothId, mobId, headId);
+			}
+		}
+		
+
+		
+		/*static bool flag = false;
+		charaId = 9004;
+		clothId = 900401;
+		headId = 0;
+		flag = !flag;*/
+		return reinterpret_cast<decltype(StoryCharacter3D_LoadModel_hook)*>
+			(StoryCharacter3D_LoadModel_orig)(charaId, cardId, clothId, zekkenNumber, headId, isWet, isDirt, mobId,dressColorId, zekkenName, zekkenFontStyle, color, fontColor , suitColor ,isUseDressDataHeadModelSubId,useCircleShadow);
 	}
 
 
 	void* Cute_Http_WWWRequest_Post_orig = nullptr;
 	void Cute_Http_WWWRequest_Post_hook(void* _this,Il2CppString* url, char* postdata, void* headers) {
 		wprintf(L"Original URL: %s\n", url->start_char);
-
-		
 		wstring url_raw = wstring(url->start_char);
 		string url_conv;
-		url_conv.assign(url_raw.begin(),url_raw.end());
-
+		url_conv.assign(url_raw.begin(), url_raw.end());
 		Url posturl(url_conv);
-		Url replaceUrl(g_customHost);
-		posturl.scheme(replaceUrl.scheme());
-		posturl.host(replaceUrl.host());
-		posturl.port(replaceUrl.port());
-		//posturl.
-		 
-
-		printf("Replaced URL: %s\n", posturl.str().c_str());
-
+		currentUrl = posturl;
+		if (strlen(g_customHost) > 0) {
+			Url replaceUrl(g_customHost);
+			posturl.scheme(replaceUrl.scheme());
+			posturl.host(replaceUrl.host());
+			posturl.port(replaceUrl.port());
+			printf("Replaced URL: %s\n", posturl.str().c_str());
+		}										
+		
 		return reinterpret_cast<decltype(Cute_Http_WWWRequest_Post_hook)*>
-			(Cute_Http_WWWRequest_Post_orig)(_this, il2cpp_string_new(posturl.str().c_str()) ,postdata,headers);
+			(Cute_Http_WWWRequest_Post_orig)(_this, il2cpp_string_new(posturl.str().c_str()), postdata, headers);
+							
 	}
 
+	
 	/*void* BitmapTextCommon_GetFontPath_orig = nullptr;
 	Il2CppString* BitmapTextCommon_GetFontPath_hook(void* _this,void* fontType) {
 		auto path = reinterpret_cast<decltype(BitmapTextCommon_GetFontPath_hook)*>
@@ -497,13 +761,573 @@ namespace
 			(GachaBGController_GateDoor_SetRarity_orig)(_this, e);
 	}
 
+	void* RaceResultScene_GetMotionVariationId_orig = nullptr;
+	int RaceResultScene_GetMotionVariationId_hook(int charaId) {
+		printf("GetMotionVariationId : charaId=%d\n", charaId);
+		if (c_raceResultCutinMotionChara > -1) {
+			charaId = c_raceResultCutinMotionChara;
+			//dress->CharaId = c_raceResultCutinMotionChara;
+		}
+		return reinterpret_cast<decltype(RaceResultScene_GetMotionVariationId_hook)*>
+			(RaceResultScene_GetMotionVariationId_orig)(charaId);
+	}
+
+	void* RaceResultScene_PlayFinishOrderAnim_orig = nullptr;
+	void RaceResultScene_PlayFinishOrderAnim_hook(void* _this, void* onPlayed) {
+		printf("RaceResultScene_PlayFinishOrderAnim called\n");
+		return reinterpret_cast<decltype(RaceResultScene_PlayFinishOrderAnim_hook)*>
+			(RaceResultScene_PlayFinishOrderAnim_orig)(_this,onPlayed);
+	}
+
+	void* RaceResultCutInHelper_LoadBodyMotion_orig = nullptr;
+	void* RaceResultCutInHelper_LoadBodyMotion_hook(int characterId, MasterDressData* dress, int personalityType, int rank, int grade, int raceType) {
+		
+		printf("RaceResultCutInHelper_LoadBodyMotion: charaId=%d,dressid=%d,rank=%d,grade=%d\n",characterId, dress->Id,rank,grade);
+		if (c_raceResultCutinMotionChara > -1) {
+			characterId = c_raceResultCutinMotionChara;
+			dress->CharaId = c_raceResultCutinMotionChara;
+		}
+		if (c_raceResultCutinMotionDress > -1) {
+			dress->Id = c_raceResultCutinMotionDress;
+		}
+		if (c_raceResultCutinMotionGrade > -1) {
+			grade = c_raceResultCutinMotionGrade;
+		}
+		if (c_raceResultCutinMotionRank > -1) {
+			rank = c_raceResultCutinMotionRank;
+		}
+		
+		//return nullptr;
+		return reinterpret_cast<decltype(RaceResultCutInHelper_LoadBodyMotion_hook)*>
+			(RaceResultCutInHelper_LoadBodyMotion_orig)(characterId, dress, personalityType, rank, grade, raceType);
+	}
+
+	void* RaceResultCutInHelper_LoadCameraMotion_orig = nullptr;
+	void* RaceResultCutInHelper_LoadCameraMotion_hook(int characterId, MasterDressData* dress, int personalityType, int rank, int grade, int raceType) {
+		printf("RaceResultCutInHelper_LoadCameraMotion: charaId=%d,dressid=%d,rank=%d,grade=%d\n", characterId, dress->Id, rank, grade);
+		//return nullptr;
+		if (c_raceResultCutinMotionChara > -1) {
+			characterId = c_raceResultCutinMotionChara;
+			dress->CharaId = c_raceResultCutinMotionChara;
+		}
+		if (c_raceResultCutinMotionDress > -1) {
+			dress->Id = c_raceResultCutinMotionDress;
+		}
+		if (c_raceResultCutinMotionGrade > -1) {
+			grade = c_raceResultCutinMotionGrade;
+		}
+		if (c_raceResultCutinMotionRank > -1) {
+			rank = c_raceResultCutinMotionRank;
+		}
+		return reinterpret_cast<decltype(RaceResultCutInHelper_LoadCameraMotion_hook)*>
+			(RaceResultCutInHelper_LoadCameraMotion_orig)(characterId, dress, personalityType, rank, grade, raceType);
+	}
+
+	void* RaceResultCutInHelper_LoadEarMotion_orig = nullptr;
+	void* RaceResultCutInHelper_LoadEarMotion_hook(int characterId, MasterDressData* dress, int personalityType, int rank, int grade, int raceType) {
+		printf("RaceResultCutInHelper_LoadEarMotion: charaId=%d,dressid=%d,rank=%d,grade=%d\n", characterId, dress->Id, rank, grade);
+		//return nullptr;
+		if (c_raceResultCutinMotionChara > -1) {
+			characterId = c_raceResultCutinMotionChara;
+			dress->CharaId = c_raceResultCutinMotionChara;
+		}
+		if (c_raceResultCutinMotionDress > -1) {
+			dress->Id = c_raceResultCutinMotionDress;
+		}
+		if (c_raceResultCutinMotionGrade > -1) {
+			grade = c_raceResultCutinMotionGrade;
+		}
+		if (c_raceResultCutinMotionRank > -1) {
+			rank = c_raceResultCutinMotionRank;
+		}
+		return reinterpret_cast<decltype(RaceResultCutInHelper_LoadEarMotion_hook)*>
+			(RaceResultCutInHelper_LoadEarMotion_orig)(characterId, dress, personalityType, rank, grade, raceType);
+	}
+
+	void* RaceResultCutInHelper_LoadFacialMotion_orig = nullptr;
+	void* RaceResultCutInHelper_LoadFacialMotion_hook(int characterId, MasterDressData* dress, int personalityType, int rank, int grade, int raceType) {
+		printf("RaceResultCutInHelper_LoadFacialMotion: charaId=%d,dressid=%d,rank=%d,grade=%d\n", characterId, dress->Id, rank, grade);
+		//return nullptr;
+		if (c_raceResultCutinMotionChara > -1) {
+			characterId = c_raceResultCutinMotionChara;
+			dress->CharaId = c_raceResultCutinMotionChara;
+		}
+		if (c_raceResultCutinMotionDress > -1) {
+			dress->Id = c_raceResultCutinMotionDress;
+		}
+		if (c_raceResultCutinMotionGrade > -1) {
+			grade = c_raceResultCutinMotionGrade;
+		}
+		if (c_raceResultCutinMotionRank > -1) {
+			rank = c_raceResultCutinMotionRank;
+		}
+		return reinterpret_cast<decltype(RaceResultCutInHelper_LoadFacialMotion_hook)*>
+			(RaceResultCutInHelper_LoadFacialMotion_orig)(characterId, dress, personalityType, rank, grade, raceType);
+	}
+
+	void* ResourcePath_GetCharacterRaceResultMotionPath_orig = nullptr;
+	Il2CppString* ResourcePath_GetCharacterRaceResultMotionPath_hook(int characterId, MasterDressData* dress, int personalityType, int rank, int grade, int raceType) {				
+		printf("ResourcePath_GetCharacterRaceResultMotionPath: charaId=%d,dressid=%d,rank=%d,grade=%d\n", characterId, dress->Id, rank, grade);
+		
+		Il2CppString* ret = reinterpret_cast<decltype(ResourcePath_GetCharacterRaceResultMotionPath_hook)*>
+			(ResourcePath_GetCharacterRaceResultMotionPath_orig)(characterId, dress, personalityType, rank, grade, raceType);
+		
+		wprintf(L"ResourcePath_GetCharacterRaceResultMotionPath return=%s", wstring(ret->start_char).c_str());
+		return ret;
+	}
+
+	void* RaceSkillCutInHelper_PreInstantiateCharaUser_orig = nullptr;
+	void RaceSkillCutInHelper_PreInstantiateCharaUser_hook(int charaId, int dressId, int charaIndex, int headId = 0, bool isUseDressDataHeadModelSubId = true) {
+		printf("RaceSkillCutInHelper_PreInstantiateCharaUser called charaid=%d\n", charaId);
+		return reinterpret_cast<decltype(RaceSkillCutInHelper_PreInstantiateCharaUser_hook)*>
+			(RaceSkillCutInHelper_PreInstantiateCharaUser_orig)(charaId, dressId, charaIndex, headId, isUseDressDataHeadModelSubId);
+	}
+
+	void* RaceSkillCutInHelper_InitForGacha_orig = nullptr;
+	void RaceSkillCutInHelper_InitForGacha_hook(void* _this,void* owner) {
+		printf("RaceSkillCutInHelper_InitForGacha called\n");
+
+		return reinterpret_cast<decltype(RaceSkillCutInHelper_InitForGacha_hook)*>
+			(RaceSkillCutInHelper_InitForGacha_orig)(_this,owner);
+
+	}
+
+	void* Gallop_Cutin_CutinCharacter_ctor_orig = nullptr;
+	void* Gallop_Cutin_CutinCharacter_ctor_hook(void*_this, CutInCharacterCreateInfo* createInfo) {
+		printf("CutinCharacter type=%d charaid=%d dressid=%d, headid=%d, is어쩌구=%d, index=%d\n",
+			createInfo->_characterType,createInfo->_charaId,createInfo->_clothId,createInfo->_headId, createInfo->IsUseDressDataHeadModelSubId,createInfo->_charaIndex);
+		if (c_gachaCharaType > -1) {
+			createInfo->_characterType = c_gachaCharaType;
+		}
+		if (c_gachaCutinChara > -1) {
+			createInfo->_charaId = c_gachaCutinChara;			
+		}
+		if (c_gachaCutinDress > -1) {
+			createInfo->_clothId = c_gachaCutinDress;
+		}
+		if (c_gachaCutinHeadid > -1) {
+			createInfo->_headId = c_gachaCutinHeadid;
+		}
+
+		/*if (createInfo->_charaId == 1001) {
+			createInfo->_charaId = 1026;
+			if (createInfo->_clothId == 901001) {
+				createInfo->_clothId = 901026;
+			}
+			else {
+				createInfo->_clothId = 102601;
+			}
+		}
+		else {*/
+			//createInfo->_characterType = FixCharaId;
+			/*createInfo->_charaId = 1065;
+			createInfo->_clothId = 2;
+			createInfo->_headId = 0;*/
+		//}
+		
+		//createInfo->IsUseDressDataHeadModelSubId = 1;
+		return reinterpret_cast<decltype(Gallop_Cutin_CutinCharacter_ctor_hook)*>
+			(Gallop_Cutin_CutinCharacter_ctor_orig)(_this,createInfo);
+	}
+
+	
+
+	/*void* CutIn_CutInCharacter_EntryModel_orig = nullptr;
+	bool CutIn_CutInCharacter_EntryModel_hook(void* _this, void* model, int type) {
+		printf("CutIn_CutInCharacter_EntryModel called type=%d\n", type);
+		return reinterpret_cast<decltype(CutIn_CutInCharacter_EntryModel_hook)*>
+			(CutIn_CutInCharacter_EntryModel_orig)(_this, model, 3);
+	}*/
+
+	void* CutInHelper_OnCreateCharacterModel_orig = nullptr;
+	void* CutInHelper_OnCreateCharacterModel_hook(void* _this, CutInCharacterCreateInfo* info) {
+		printf("CutInHelper_OnCreateCharacterModel called origType=%d, origcharaid=%d\n",info->_characterType, info->_charaId );
+
+		if (c_gachaCharaType > -1) {
+			info->_characterType = c_gachaCharaType;
+		}
+		if (c_gachaCutinChara > -1) {
+			info->_charaId = c_gachaCutinChara;
+		}
+		if (c_gachaCutinDress > -1) {
+			info->_clothId = c_gachaCutinDress;
+		}
+		if (c_gachaCutinHeadid > -1) {
+			info->_headId = c_gachaCutinHeadid;
+		}
+		printf("CutInHelper_OnCreateCharacterModel called cType=%d, ccharaid=%d\n",  info->_characterType,info->_charaId );
+		return reinterpret_cast<decltype(CutInHelper_OnCreateCharacterModel_hook)*>
+			(CutInHelper_OnCreateCharacterModel_orig)(_this, info);
+	}
+
+	void* CutInHelper_ApplyCharacterMotion_Facial_orig = nullptr;
+	void CutInHelper_ApplyCharacterMotion_Facial_hook(void* _this, void* character, void* key, int charaId, int personalityId, int charaTypeRule) {
+		printf("CutInHelper_ApplyCharacterMotion_Facial called charaid=%d\n",charaId);
+		return reinterpret_cast<decltype(CutInHelper_ApplyCharacterMotion_Facial_hook)*>
+			(CutInHelper_ApplyCharacterMotion_Facial_orig)(_this, character,key,charaId,personalityId,charaTypeRule);
+	}
+
+	void* CutInHelper_ApplyCharacterMotion_Ear_orig = nullptr;
+	void CutInHelper_ApplyCharacterMotion_Ear_hook(void* _this, void* character, void* key, int charaId, int personalityId, int charaTypeRule) {
+		printf("CutInHelper_ApplyCharacterMotion_ear called charaid=%d\n", charaId);
+		return reinterpret_cast<decltype(CutInHelper_ApplyCharacterMotion_Ear_hook)*>
+			(CutInHelper_ApplyCharacterMotion_Ear_orig)(_this, character, key, charaId, personalityId, charaTypeRule);
+	}
+
+	void* CutInHelper_GetCharaId_orig = nullptr;
+	int CutInHelper_GetCharaId_hook(void* _this, int type, int id) {
+		printf("CutInHelper_GetCharaId called id=%d\n", id);
+		int res = reinterpret_cast<decltype(CutInHelper_GetCharaId_hook)*>
+			(CutInHelper_GetCharaId_orig)(_this, type,id);
+		return res;
+	}
+
+	void* DialogManager_PushErrorCommon_orig = nullptr;
+	void DialogManager_PushErrorCommon_hook(void* _this, Il2CppString* message, Il2CppString* headerMessage, void* onCloseButtonPushed, int popupType = 0) {
+		wprintf(L"ErrorDialog Message=%s, popupType=%d\n", wstring(message->start_char).c_str(), popupType);
+		return reinterpret_cast<decltype(DialogManager_PushErrorCommon_hook)*>
+			(DialogManager_PushErrorCommon_orig)(_this, message, headerMessage, onCloseButtonPushed, popupType);
+	}
+
+	void* Live_LiveTimelineCamera_AlterUpdate_orig = nullptr;
+	void Live_LiveTimelineCamera_AlterUpdate_hook(void* _this, float liveTime) {
+		//printf("Livecam AlterUpdate time=%.5f\n",liveTime);
+		if (!c_stopLiveCam) {
+			return reinterpret_cast<decltype(Live_LiveTimelineCamera_AlterUpdate_hook)*>
+				(Live_LiveTimelineCamera_AlterUpdate_orig)(_this, liveTime);
+		}
+		
+	}
+
+	void* Live_Cutt_AlterUpdate_CameraLookAt_orig = nullptr;
+	void Live_Cutt_AlterUpdate_CameraLookAt_hook(void* _this, void* sheet, int currentFrame, Vector3_t* outLookAt) {
+		if (!c_stopLiveCam) {
+			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_CameraLookAt_hook)*>
+				(Live_Cutt_AlterUpdate_CameraLookAt_orig)(_this, sheet, currentFrame, outLookAt);
+		}
+		//printf("AlterUpdate_CameraLookAt x=%.2f y=%.2f z=%.2f CurrentFrame=%d\n", outLookAt->x, outLookAt->y, outLookAt->z, currentFrame);
+		
+	}
+
+	void* Live_Cutt_AlterUpdate_CameraPos_orig = nullptr;
+	void Live_Cutt_AlterUpdate_CameraPos_hook(void* _this, void* sheet, int currentFrame, int sheetIndex, bool isUseCameraMotion) {
+		if (!c_stopLiveCam) {
+			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_CameraPos_hook)*>
+				(Live_Cutt_AlterUpdate_CameraPos_orig)(_this, sheet, currentFrame, sheetIndex, isUseCameraMotion);
+		}
+		//printf("AlterUpdate_CameraPos sheetIndex=%d, CurrentFrame=%d\n",sheetIndex, currentFrame);
+		
+	}
+
+	void* Live_Cutt_AlterUpdate_CameraSwitcher_orig = nullptr;
+	void Live_Cutt_AlterUpdate_CameraSwitcher_hook(void* _this, void* sheet, int currentFrame) {
+		if (!c_stopLiveCam) {
+			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_CameraSwitcher_hook)*>
+				(Live_Cutt_AlterUpdate_CameraSwitcher_orig)(_this, sheet, currentFrame);
+		}
+		//printf("AlterUpdate_CameraSwitcher CurrentFrame=%d\n", currentFrame);
+		
+	}
+
+	void* Live_Cutt_AlterUpdate_CameraLayer_orig = nullptr;
+	void Live_Cutt_AlterUpdate_CameraLayer_hook(void* _this, void* sheet, int currentFrame, Vector3_t* offsetMaxPosition, Vector3_t* offsetMinPosition) {
+		if (!c_stopLiveCam) {
+			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_CameraLayer_hook)*>
+				(Live_Cutt_AlterUpdate_CameraLayer_orig)(_this, sheet, currentFrame,offsetMaxPosition,offsetMinPosition);
+		}
+		/*printf("AlterUpdate_CameraLayer CurrentFrame=%d minPos x=%.2f y=%.2f z=%.2f maxPos x=%.2f y=%.2f z=%.2f\n", 
+			currentFrame,
+		offsetMinPosition->x,offsetMinPosition->y,offsetMinPosition->z,
+			offsetMaxPosition->x, offsetMaxPosition->y, offsetMaxPosition->z );*/
+		
+	}
+
+	void* Live_Cutt_AlterUpdate_CameraMotion_orig = nullptr;
+	void Live_Cutt_AlterUpdate_CameraMotion_hook(void* _this, void* sheet, int currentFrame) {
+		//printf("AlterUpdate_CameraMotion CurrentFrame=%d\n", currentFrame);
+		if (!c_stopLiveCam) {
+			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_CameraMotion_hook)*>
+				(Live_Cutt_AlterUpdate_CameraMotion_orig)(_this, sheet, currentFrame);
+		}
+		
+	}
+
+	void* Live_Cutt_AlterUpdate_CameraRoll_orig = nullptr;
+	void Live_Cutt_AlterUpdate_CameraRoll_hook(void* _this, void* sheet, int currentFrame) {
+		//printf("AlterUpdate_CameraRoll CurrentFrame=%d\n", currentFrame);
+		if (!c_stopLiveCam) {
+			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_CameraRoll_hook)*>
+				(Live_Cutt_AlterUpdate_CameraRoll_orig)(_this, sheet, currentFrame);
+		}
+		
+	}
+
+	void* Live_Cutt_AlterUpdate_MultiCameraSwitcher_orig = nullptr;
+	void Live_Cutt_AlterUpdate_MultiCameraSwitcher_hook(void* _this, void* sheet, void* curData, void* nextData, int currentFrame, int keyIndex, bool isFading) {
+		printf("AlterUpdate_MultiCameraSwitcher CurrentFrame=%d, keyindex=%d\n", currentFrame,keyIndex);
+		return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_CameraRoll_hook)*>
+			(Live_Cutt_AlterUpdate_CameraRoll_orig)(_this, sheet,currentFrame);
+	}
+
+	void* Live_Cutt_AlterUpdate_MultiCamera_orig = nullptr;
+	void Live_Cutt_AlterUpdate_MultiCamera_hook(void* _this, void* sheet, int currentFrame) {
+		printf("AlterUpdate_MultiCamera CurrentFrame=%d \n", currentFrame);
+		return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_MultiCamera_hook)*>
+			(Live_Cutt_AlterUpdate_MultiCamera_orig)(_this, sheet,currentFrame);
+	}
+
+	void* Live_Cutt_AlterUpdate_CameraFov_orig = nullptr;
+	void Live_Cutt_AlterUpdate_CameraFov_hook(void* _this, void* sheet, int currentFrame) {
+		//printf("AlterUpdate_CameraFov CurrentFrame=%d \n", currentFrame);
+		if (!c_stopLiveCam) {
+			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_CameraFov_hook)*>
+				(Live_Cutt_AlterUpdate_CameraFov_orig)(_this, sheet, currentFrame);
+		}
+		
+	}
+
+	void* Live_Cutt_AlterLateUpdate_CameraMotion_orig = nullptr;
+	bool Live_Cutt_AlterLateUpdate_CameraMotion_hook(void* _this, void* sheet, int currentFrame) {
+		/*bool ret = reinterpret_cast<decltype(Live_Cutt_AlterLateUpdate_CameraMotion_hook)*>
+			(Live_Cutt_AlterLateUpdate_CameraMotion_orig)(_this, sheet, currentFrame);*/
+
+		//printf("AlterLateUpdate_CameraMotion CurrentFrame=%d, ret=%d\n", currentFrame,ret);
+		if (!c_stopLiveCam) {
+			return reinterpret_cast<decltype(Live_Cutt_AlterLateUpdate_CameraMotion_hook)*>
+				(Live_Cutt_AlterLateUpdate_CameraMotion_orig)(_this, sheet, currentFrame);
+		}
+		
+			return true;
+		
+
+	}
+
+	void* Live_Cutt_AlterUpdate_EyeCameraLookAt_orig = nullptr;
+	void Live_Cutt_AlterUpdate_EyeCameraLookAt_hook(void* _this, void* sheet, int currentFrame) {
+		//printf("AlterUpdate_EyeCameraLookAt CurrentFrame=%d \n", currentFrame);
+		if (!c_stopLiveCam) {
+			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_EyeCameraLookAt_hook)*>
+				(Live_Cutt_AlterUpdate_EyeCameraLookAt_orig)(_this, sheet, currentFrame);
+		}
+		
+	}
+
+	void* Live_Cutt_AlterUpdate_EyeCameraPosition_orig = nullptr;
+	void Live_Cutt_AlterUpdate_EyeCameraPosition_hook(void* _this, void* sheet, int currentFrame) {
+		//printf("AlterUpdate_EyeCameraLookAt CurrentFrame=%d \n", currentFrame);
+		if (!c_stopLiveCam) {
+			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_EyeCameraPosition_hook)*>
+				(Live_Cutt_AlterUpdate_EyeCameraPosition_orig)(_this, sheet, currentFrame);
+		}
+		
+	}
+
+	void* Live_Cutt_AlterUpdate_orig = nullptr;
+	void Live_Cutt_AlterUpdate_hook(void* _this, float liveTime) {
+		//printf("AlterUpdate time=%.2f \n", liveTime);
+		if (!c_stopLiveCam) {
+			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_hook)*>
+				(Live_Cutt_AlterUpdate_orig)(_this, liveTime);
+		}
+	}
+
+	void* Live_Cutt_AlterUpdate_MultiCameraLookAt_orig = nullptr;
+	void Live_Cutt_AlterUpdate_MultiCameraLookAt_hook(void* _this, void* sheet, int currentFrame) {
+		//printf("AlterUpdate_MultiCameraLookAt currentFrame=%d \n", currentFrame);
+		if (!c_stopLiveCam) {
+			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_MultiCameraLookAt_hook)*>
+				(Live_Cutt_AlterUpdate_MultiCameraLookAt_orig)(_this, sheet,currentFrame);
+		}
+	}
+
+	void* Live_Cutt_AlterUpdate_MultiCameraPosition_orig = nullptr;
+	void Live_Cutt_AlterUpdate_MultiCameraPosition_hook(void* _this, void* sheet, int currentFrame) {
+		//printf("AlterUpdate_MultiCameraPosition currentFrame=%d \n", currentFrame);
+		if (!c_stopLiveCam) {
+			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_MultiCameraPosition_hook)*>
+				(Live_Cutt_AlterUpdate_MultiCameraPosition_orig)(_this, sheet, currentFrame);
+		}
+	}
+
+	void* Live_Cutt_AlterUpdate_MultiCameraTiltShift_orig = nullptr;
+	void Live_Cutt_AlterUpdate_MultiCameraTiltShift_hook(void* _this, void* sheet, int currentFrame) {
+		//printf("AlterUpdate_MultiCameraTiltShift currentFrame=%d \n", currentFrame);
+		if (!c_stopLiveCam) {
+			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_MultiCameraTiltShift_hook)*>
+				(Live_Cutt_AlterUpdate_MultiCameraTiltShift_orig)(_this, sheet, currentFrame);
+		}
+	}
+
+	void* Live_Cutt_AlterUpdate_PostEffect_DOF_orig = nullptr;
+	void Live_Cutt_AlterUpdate_PostEffect_DOF_hook(void* _this, void* sheet, int currentFrame, Vector3_t* cameraLookAt) {
+		
+		//printf("AlterUpdate_PostEffect_DOF currentFrame=%d pos x=%.2f y=%.2f z=%.2f \n", currentFrame,
+			//cameraLookAt->x,cameraLookAt->y,cameraLookAt->z);
+		if (!c_stopLiveCam) {
+			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_PostEffect_DOF_hook)*>
+				(Live_Cutt_AlterUpdate_PostEffect_DOF_orig)(_this, sheet, currentFrame,cameraLookAt);
+		}
+	}
+
+	void* Unity_KeyboardEvent_orig = nullptr;
+	void* Unity_KeyboardEvent_hook(Il2CppString* key) {
+		wprintf(L"KeyEvent %s\n", wstring(key->start_char).c_str());
+
+		return reinterpret_cast<decltype(Unity_KeyboardEvent_hook)*>
+			(Unity_KeyboardEvent_orig)(key);
+	}
+
+	void* GameSystem_SoftwareReset_orig = nullptr;
+	void GameSystem_SoftwareReset_hook(void* _this) {
+		printf("Called GameSystem_SoftwareReset\nContinew?: (y, n)");
+		char ans = 0;
+		scanf_s("%c", &ans,1);
+		if (ans == 'y') {
+			return reinterpret_cast<decltype(GameSystem_SoftwareReset_hook)*>
+				(GameSystem_SoftwareReset_orig)(_this);
+		}
+
+	}
+
+	void* GallopUtil_GotoTitleOnError_orig = nullptr;
+	void GallopUtil_GotoTitleOnError_hook(Il2CppString* text) {
+		wprintf(L"GallopUtil_GotoTitleOnError text=%s\n", wstring(text->start_char).c_str());
+		//return reinterpret_cast<decltype(GallopUtil_GotoTitleOnError_hook)*>
+		//	(GallopUtil_GotoTitleOnError_orig)(text);
+	}
+
+	void* GetKeyDown_orig = nullptr;
+	bool GetKeyDown_hook(int key) {
+		bool ret = reinterpret_cast<decltype(GetKeyDown_hook)*>
+			(GetKeyDown_orig)(key);
+		bool ret2 = reinterpret_cast<decltype(GetKeyDown_hook)*>
+			(GetKeyDown_orig)(0x73);
+		if(ret)
+			printf("KeyDown %d=%s\n", key, ret?"true":"false");
+		if(ret2)
+			printf("KeyDown2 %d=%s\n", 0x73, ret2 ? "true" : "false");
+		return ret;
+	}
+
+	void* UnityEngine_GameObject_ctor_orig = nullptr;
+	void UnityEngine_GameObject_ctor_hook(void* _this, Il2CppString* name) {
+		printf("%p\n", _this);
+		auto ssql = std::wstring(name->start_char);
+
+		wprintf(L"new GameObject name=%s\n", ssql.c_str());
+		return reinterpret_cast<decltype(UnityEngine_GameObject_ctor_hook)*>
+			(UnityEngine_GameObject_ctor_orig)(_this,name);
+	}
+
+	void* TapEffectController_ctor_orig = nullptr;
+	void TapEffectController_ctor_hook(void* _this) {
+		reinterpret_cast<decltype(TapEffectController_ctor_hook)*>
+			(TapEffectController_ctor_orig)(_this);
+		printf("disabled tapeffect\n");
+		TapEffect_Disable(_this);
+	}
+
+	void* Cute_Core_Device_GetPersistentDataPath_orig = nullptr;
+	Il2CppString* Cute_Core_Device_GetPersistentDataPath_hook() {
+		
+		Il2CppString* ret = reinterpret_cast<decltype(Cute_Core_Device_GetPersistentDataPath_hook)*>
+			(Cute_Core_Device_GetPersistentDataPath_orig)();
+
+		if (strlen(g_customDataPath) > 0) {
+			Il2CppString* custompath = il2cpp_string_new(g_customDataPath);
+			wprintf(L"originalpersistentpath=%s, replacedpersistentpath=%s\n", ret->start_char, custompath->start_char);
+			return custompath;
+		}		
+		
+		return ret;
+	}
+
+	void* unityengine_get_persistentDataPath_orig = nullptr;
+	Il2CppString* unityengine_get_persistentDataPath_hook() {
+		Il2CppString* ret = reinterpret_cast<decltype(unityengine_get_persistentDataPath_hook)*>
+			(unityengine_get_persistentDataPath_orig)();
+
+		if (strlen(g_customDataPath) > 0) {
+			Il2CppString* custompath = il2cpp_string_new(g_customDataPath);
+			wprintf(L"[unityengine_get_persistentDataPath] originalpersistentpath=%s, replacedpersistentpath=%s\n", ret->start_char, custompath->start_char);
+			return custompath;
+		}
+
+		return ret;
+	}
+
+	/*void* assetbundleHelper_IsNeedManifestSetup_orig = nullptr;
+	bool assetbundleHelper_IsNeedManifestSetup_hook() {
+		bool orig = reinterpret_cast<decltype(assetbundleHelper_IsNeedManifestSetup_hook)*>
+			(assetbundleHelper_IsNeedManifestSetup_orig)();
+
+		if (g_skipResourceDownload) {
+			printf("SkipResourceDL(IsNeedManifestSetup) ret false, orig=%d\n",orig);
+			return false;
+		}
+		else {
+			return orig;
+		}
+
+	}
+
+	void* assetbundleHelper_IsExistGallopResources_orig = nullptr;
+	bool assetbundleHelper_IsExistGallopResources_hook() {
+		bool orig = reinterpret_cast<decltype(assetbundleHelper_IsExistGallopResources_hook)*>
+			(assetbundleHelper_IsExistGallopResources_orig)();
+		static bool isFirst = true;
+
+		if (g_skipResourceDownload) {
+			printf("SkipResourceDL(IsExistGallopResources) ret true, orig=%d\n", orig);
+			if (isFirst) {
+				isFirst = false;
+			}
+			else {
+				orig = true;
+			}
+				
+		}
+
+		return orig;
+	}*/
+
+	//void* Cutin_GenerateCutInModelControllerContext_orig = nullptr;
+	//void* Cutin_GenerateCutInModelControllerContext_hook(void* _this, int) {
+
+	//}
+
+	/*void* RaceResultCutInHelper_GetModelController_orig = nullptr;
+	void* RaceResultCutInHelper_GetModelController_hook(CutInCharacterCreateInfo* info) {
+		info->_characterType = FixCharaId;
+		info->_charaId = 1001;
+		info->_isWet = 1;
+		info->_isDirt = 1;
+		printf("GetModelController:type=%d, charaid=%d\n", info->_characterType, info->_charaId);
+		return reinterpret_cast<decltype(RaceResultCutInHelper_GetModelController_hook)*>
+			(RaceResultCutInHelper_GetModelController_orig)(info);
+	}*/
+
+	/*void* RaceResultCutInHelper_GetResultCuttCueId_orig = nullptr;
+	bool RaceResultCutInHelper_GetResultCuttCueId_hook(int charaId, int cardId, int* cueId) {
+		int cue = 0;
+		bool ret = reinterpret_cast<decltype(RaceResultCutInHelper_GetResultCuttCueId_hook)*>
+			(RaceResultCutInHelper_GetResultCuttCueId_orig)(charaId,cardId,&cue);
+		printf("GetResultCuttCueId:charaId=%d,cardId=%d,cueId=%d\n", charaId, cardId, cue);
+
+		*cueId = cue;
+		return ret;
+	}*/
+
 	bool (*is_virt)() = nullptr;
-	void (*setExclusiveFullScreen)(int,int,int,int) = nullptr;
+
 	int last_height = 0, last_width = 0;
 
 	void* wndproc_orig = nullptr;
 	LRESULT wndproc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	{
+		//printf("wndproc_hook\n");
+		//SetWindowText(hWnd,"test");
+
 		if (uMsg == WM_SIZING)
 		{
 			RECT* rect = reinterpret_cast<RECT*>(lParam);
@@ -635,6 +1459,7 @@ namespace
 	float (*text_get_linespacing)(void*);
 	void (*text_set_style)(void*, int);
 	void (*text_set_linespacing)(void*, float);
+	void (*gameObject_setActive)(void*,bool);
 
 	void* on_populate_orig = nullptr;
 	void on_populate_hook(void* _this, void* toFill)
@@ -668,23 +1493,33 @@ namespace
 		if (need_fullscreen) {
 			if (g_useExclusiveFullScreen) {
 				if (g_exclusiveFullScreenWidth > 0 && g_exclusiveFullScreenHeight > 0) {
-					setExclusiveFullScreen(g_exclusiveFullScreenWidth, g_exclusiveFullScreenHeight, ExclusiveFullScreen, g_max_fps);
+					
+					setExclusiveFullScreen(g_exclusiveFullScreenWidth, g_exclusiveFullScreenHeight, FullScreenMode::ExclusiveFullScreen, g_max_fps);
+					Sleep(1000); 
 				}
 				else {
-					setExclusiveFullScreen(r.width, r.height, ExclusiveFullScreen, g_max_fps);
+					
+					setExclusiveFullScreen(r.width, r.height, FullScreenMode::ExclusiveFullScreen, g_max_fps);
+					Sleep(1000);
 				}
 				
 			}
 			else {
+				
 				return reinterpret_cast<decltype(set_resolution_hook)*>(set_resolution_orig)(
 					r.width, r.height, true
 				);
+				
+				
 			}
 		}
 		else {
+			
 			return reinterpret_cast<decltype(set_resolution_hook)*>(set_resolution_orig)(
 				width, height, false
-			);			
+			);
+			
+						
 		}
 		
 		
@@ -692,17 +1527,26 @@ namespace
 		
 	}
 
-	void adjust_size()
+	//void set_resolution_hook() {
+
+	//}
+
+	void adjust_size(int w, int h)
 	{
-		thread([]() {
+		thread([&]() {
 			auto tr = il2cpp_thread_attach(il2cpp_domain_get());
 
 			Resolution_t r;
 			r = *get_resolution(&r);
 
 			auto target_height = r.height - 100;
-
-			set_resolution_hook(target_height * 0.5625f, target_height, false);
+			if (w > 0 && h > 0) {
+				set_resolution_hook(h * 0.5625f, h, false);
+			}
+			else {
+				set_resolution_hook(target_height * 0.5625f, target_height, false);
+			}
+			
 
 			il2cpp_thread_detach(tr);
 		}).detach();
@@ -715,6 +1559,17 @@ namespace
 		return reinterpret_cast<decltype(load_scene_internal_hook)*>(load_scene_internal_orig)(sceneName, sceneBuildIndex, parameters, mustCompleteNextFrame);
 	}
 
+	void* set_virt_orig = nullptr;
+	void* set_virt_hook(bool val) {
+		printf("set_virt %d\n", val);
+		return reinterpret_cast<decltype(set_virt_hook)*>(set_virt_orig)(true);
+	}
+
+	/*void* unity_font_ctor_orig = nullptr;
+	void* unity_font_ctor_hook(void* _this, Il2CppString* name) {
+		wprintf(L"Font Load: %s\n", name->start_char);
+		return reinterpret_cast<decltype(unity_font_ctor_hook)*>(unity_font_ctor_orig)(_this, name);
+	}*/
 
 	void dump_all_entries()
 	{
@@ -760,6 +1615,21 @@ namespace
 	MH_EnableHook(_name_##_offset); 
 #pragma endregion
 #pragma region HOOK_ADDRESSES
+
+		auto assetbundleHelper_IsExistGallopResources_addr = reinterpret_cast<bool(*)()> (
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"AssetBundleHelper", "IsExistGallopResources", 0
+			)
+		);
+
+		auto assetbundleHelper_IsNeedManifestSetup_addr = reinterpret_cast<bool(*)()> (
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"AssetBundleHelper", "IsNeedManifestSetup", 0
+			)
+		);
+
 		auto populate_with_errors_addr = il2cpp_symbols::get_method_pointer(
 			"UnityEngine.TextRenderingModule.dll",
 			"UnityEngine", "TextGenerator",
@@ -777,6 +1647,14 @@ namespace
 			"LibNative.Runtime.dll", "LibNative.Sqlite3", 
 			"Query", ".ctor", 2
 		);
+
+		sql_query = reinterpret_cast<void(*)(Connection*,Il2CppString*)>(query_ctor_addr);
+
+		sql_exec = reinterpret_cast<bool(*)()>(il2cpp_symbols::get_method_pointer(
+			"LibNative.Runtime.dll", "LibNative.Sqlite3",
+			"Query", "Exec", 0
+		));
+
 
 		auto query_getstr_addr = il2cpp_symbols::get_method_pointer(
 			"LibNative.Runtime.dll", "LibNative.Sqlite3",
@@ -813,6 +1691,12 @@ namespace
 				"umamusume.dll", "Gallop",
 				"StandaloneWindowResize", "get_IsVirt", 0
 		));
+
+		auto set_virt_addr = reinterpret_cast<void(*)(bool)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"StandaloneWindowResize", "set_IsVirt", 1
+			));
 
 		get_resolution = reinterpret_cast<Resolution_t * (*)(Resolution_t*)>(
 			il2cpp_symbols::get_method_pointer(
@@ -1036,7 +1920,13 @@ namespace
 				"ModelLoader", "CreateNormalModel", 1
 			));
 
-		auto ModelLoader_CreateModel_addr = reinterpret_cast<void*(*)(CharacterBuildInfo*)>(
+		ModelLoader_CreateMiniModel = reinterpret_cast<void* (*)(void*, CharacterBuildInfo*)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"ModelLoader", "CreateMiniModel", 1
+			));
+
+		auto ModelLoader_CreateModel_addr = reinterpret_cast<void*(*)(void*, CharacterBuildInfo*)>(
 			il2cpp_symbols::get_method_pointer(
 				"umamusume.dll", "Gallop",
 				"ModelLoader", "CreateModel", 1
@@ -1050,10 +1940,318 @@ namespace
 
 		auto load_scene_internal_addr = il2cpp_resolve_icall("UnityEngine.SceneManagement.SceneManager::LoadSceneAsyncNameIndexInternal_Injected(System.String,System.Int32,UnityEngine.SceneManagement.LoadSceneParameters&,System.Boolean)");
 
+		printf("icall %p\n", load_scene_internal_addr);
+
 		auto Cute_Http_WWWRequest_Post_addr = il2cpp_symbols::get_method_pointer(
 			"Cute.Http.Assembly.dll", "Cute.Http",
 			"WWWRequest", "Post", 3
 		);
+
+		auto RaceResultScene_GetMotionVariationId_addr = reinterpret_cast<int(*)(int)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"RaceResultScene", "GetMotionVariationId", 1
+			)
+			);
+		auto RaceResultScene_PlayFinishOrderAnim_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"RaceResultScene", "PlayFinishOrderAnim", 1
+		);
+
+		auto RaceResultCutInHelper_LoadBodyMotion_addr = reinterpret_cast<void*(*)(int,MasterDressData*,int,int,int,int)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"RaceResultCutInHelper", "LoadBodyMotion", 6
+			)
+		);
+
+
+		auto RaceResultCutInHelper_LoadCameraMotion_addr = reinterpret_cast<void* (*)(int, MasterDressData*, int, int, int, int)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"RaceResultCutInHelper", "LoadCameraMotion", 6
+			)
+		);
+
+		auto RaceResultCutInHelper_LoadEarMotion_addr = reinterpret_cast<void* (*)(int, MasterDressData*, int, int, int, int)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"RaceResultCutInHelper", "LoadEarMotion", 6
+			)
+			);
+
+		auto RaceResultCutInHelper_LoadFacialMotion_addr = reinterpret_cast<void* (*)(int, MasterDressData*, int, int, int, int)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"RaceResultCutInHelper", "LoadFacialMotion", 6
+			)
+			);
+
+		auto ResourcePath_GetCharacterRaceResultMotionPath_addr = reinterpret_cast<Il2CppString* (*)(int, MasterDressData*, int, int, int, int)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"RaceResultCutInHelper", "LoadFacialMotion", 6
+			)
+			);
+
+		auto RaceSkillCutInHelper_PreInstantiateCharaUser_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"RaceSkillCutInHelper", "PreInstantiateCharaUser", 6
+		);
+
+		auto RaceSkillCutInHelper_InitForGacha_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"RaceSkillCutInHelper", "InitForGacha", 1
+		);
+
+		auto Gallop_Cutin_CutinCharacter_ctor_addr = reinterpret_cast<void(*)(void*, CutInCharacterCreateInfo*) > (
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop.CutIn",
+				"CutInCharacter", ".ctor", 1
+			)
+		);
+
+	/*	auto CutIn_CutInCharacter_EntryModel_addr = reinterpret_cast<bool(*)(void*, void*, int)> (
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop.CutIn",
+				"CutInCharacter", "EntryModel", 2
+			)
+		);*/
+
+		auto CutInHelper_OnCreateCharacterModel_addr = reinterpret_cast<void(*)(void*, CutInCharacterCreateInfo*)> (
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"CutInHelper", "OnCreateCharacterModel", 1
+			)
+		);
+
+		auto CutInHelper_ApplyCharacterMotion_Facial_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"CutInHelper", "ApplyCharacterMotion_Facial", 5
+		);
+
+		auto CutInHelper_ApplyCharacterMotion_Ear_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"CutInHelper", "ApplyCharacterMotion_Ear", 5
+		);
+
+		auto CutInHelper_GetCharaId_addr = reinterpret_cast<int(*)(void*, int,int)> (
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"CutInHelper", "GetCharaId", 2
+			)
+		);
+
+		auto CharacterBuildInfo_ctor_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"CharacterBuildInfo", ".ctor", 9+2
+		);
+
+		auto CharacterBuildInfo_ctor_overload1_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"CharacterBuildInfo", ".ctor", 0
+		);
+
+		auto CharacterBuildInfo_ctor_overload2_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"CharacterBuildInfo", ".ctor", 11+2
+		);
+
+		auto StoryCharacter3D_LoadModel_addr = reinterpret_cast<void(*)(int, int,int,int,int,bool,bool,int,int,Il2CppString*,int,int,int,int,bool,bool)> (
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"StoryCharacter3D", "LoadModel", 16
+			)
+		);
+
+		auto DialogManager_PushErrorCommon_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll","Gallop",
+			"DialogManager","PushErrorCommon",4
+		);
+
+		auto Live_LiveTimelineCamera_AlterUpdate_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live",
+			"LiveTimelineCamera", "AlterUpdate", 1
+		);
+
+		auto Live_Cutt_AlterUpdate_CameraLookAt_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "AlterUpdate_CameraLookAt", 3
+		);
+
+		auto Live_Cutt_AlterUpdate_CameraPos_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "AlterUpdate_CameraPos", 4
+		);
+
+		auto Live_Cutt_AlterUpdate_CameraSwitcher_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "AlterUpdate_CameraSwitcher", 2
+		);
+
+		auto Live_Cutt_AlterUpdate_CameraLayer_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "AlterUpdate_CameraLayer", 4
+		);
+
+		auto Live_Cutt_AlterUpdate_CameraMotion_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "AlterUpdate_CameraMotion", 2
+		);
+
+		auto Live_Cutt_AlterUpdate_CameraRoll_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "AlterUpdate_CameraRoll", 2
+		);
+
+		auto Live_Cutt_AlterUpdate_MultiCameraSwitcher_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "AlterUpdate_MultiCameraSwitcher", 6
+		);
+
+		auto Live_Cutt_AlterUpdate_MultiCamera_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "AlterUpdate_MultiCamera", 2
+		);
+
+		auto Live_Cutt_AlterUpdate_EyeCameraPosition_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "AlterUpdate_EyeCameraPosition", 2
+		);
+
+		auto Live_Cutt_AlterUpdate_EyeCameraLookAt_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "AlterUpdate_EyeCameraLookAt", 2
+		);
+
+		auto Live_Cutt_AlterLateUpdate_CameraMotion_addr = reinterpret_cast<bool(*)(void*, void*, int)> (
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop.Live.Cutt",
+				"LiveTimelineControl", "AlterLateUpdate_CameraMotion", 2
+			)
+		);
+
+		auto Live_Cutt_AlterUpdate_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "AlterUpdate", 1
+		);
+		auto Live_Cutt_AlterUpdate_MultiCameraLookAt_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "AlterUpdate_MultiCameraLookAt", 2
+		);
+
+		auto Live_Cutt_AlterUpdate_MultiCameraPosition_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "AlterUpdate_MultiCameraPosition", 2
+		);
+
+		auto Live_Cutt_AlterUpdate_MultiCameraTiltShift_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "AlterUpdate_MultiCameraTiltShift", 2
+		);
+
+		auto Live_Cutt_AlterUpdate_PostEffect_DOF_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "AlterUpdate_PostEffect_DOF", 3
+		);
+
+		auto Live_Cutt_AlterUpdate_CameraFov_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "AlterUpdate_CameraFov", 2
+		); 
+
+		auto  GameSystem_SoftwareReset_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"GameSystem", "SoftwareReset", 0
+		);
+
+		auto GallopUtil_GotoTitleOnError_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"GallopUtil", "GotoTitleOnError", 1
+		);
+
+		auto UnityEngine_GameObject_ctor_addr = reinterpret_cast<void(*)(void*, Il2CppString*)>(
+			il2cpp_symbols::get_method_pointer(
+			"UnityEngine.CoreModule.dll", "UnityEngine",
+			"GameObject", ".ctor", 1
+			)
+		);
+
+		gameObject_setActive = reinterpret_cast<void(*)(void*, bool)>(
+			il2cpp_symbols::get_method_pointer(
+				"UnityEngine.CoreModule.dll", "UnityEngine",
+				"GameObject", "SetActive", 1
+				)
+			);
+
+		GetKeyDown = reinterpret_cast<bool(*)(int)> (
+			il2cpp_symbols::get_method_pointer(
+				"UnityEngine.InputLegacyModule.dll", "UnityEngine",
+				"Input", "GetKeyDown", 1
+			)
+		);
+
+		TapEffect_Disable = reinterpret_cast<void(*)(void*)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"TapEffectController", "Disable", 0
+			)
+			);
+
+		auto TapEffectController_ctor_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"TapEffectController", ".ctor", 0
+		);
+
+		auto Cute_Core_Device_GetPersistentDataPath_addr = reinterpret_cast<Il2CppString* (*)()>(
+			il2cpp_symbols::get_method_pointer(
+			"Cute.Core.Assembly.dll", "Cute.Core",
+			"Device", "GetPersistentDataPath", 0
+		));
+		
+		auto unityengine_get_persistentDataPath_addr = reinterpret_cast<Il2CppString*(*)()>(
+			il2cpp_symbols::get_method_pointer(
+				"UnityEngine.CoreModule.dll", "UnityEngine",
+				"Application", "get_persistentDataPath", 0
+			));
+
+		/*auto unity_font_ctor_addr = reinterpret_cast<void *(*)(void* , Il2CppString*)>(
+			il2cpp_symbols::get_method_pointer(
+				"UnityEngine.TextRenderingModule.dll", "UnityEngine",
+				"Font", ".ctor", 1
+			));*/
+
+		/*auto Cutin_GenerateCutInModelControllerContext_addr = reinterpret_cast<void(*)(int, int, int, int, bool, int, bool,bool,int) > (
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "CutIn.CutIn",
+				"CutInCharacter", "GenerateCutInModelControllerContext", 9
+				)
+			);*/
+
+		/*auto Unity_KeyboardEvent_addr = reinterpret_cast<bool(*)(void*, void*, int)> (
+			il2cpp_symbols::get_method_pointer(
+				"UnityEngine.IMGUIModule.dll", "UnityEngine",
+				"Event", "KeyboardEvent", 1
+			)
+			);*/
+		/*auto Live_Cutt_AlterUpdate_MultiCameraTiltShift_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "AlterUpdate_MultiCameraTiltShift", 2
+		);*/
+
+		/*auto RaceResultCutInHelper_GetModelController_addr = reinterpret_cast<void*(*)(CutInCharacterCreateInfo*)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"RaceResultCutInHelper", "GetModelController", 1
+			)
+			);*/
+
+		/*auto RaceResultCutInHelper_GetResultCuttCueId_addr = reinterpret_cast<bool(*)(int, int,int*)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"RaceResultCutInHelper", "GetResultCuttCueId", 3
+			)
+			);*/
 
 	//auto GachaBGController_GateDoor_SetRarity_addr = il2cpp_resolve_icall("Gallop.GachaBGController$GateDoor::SetRarity(Gallop.GachaDefine.GachaRarityType_Door)");
 
@@ -1065,7 +2263,7 @@ namespace
 		/*auto GachaBGController_GateDoor_SetRarity_addr =
 			il2cpp_symbols::get_method_pointer(
 				"umamusume.dll", "Gallop",
-				"GachaBGController$GateDoor","SetRarity",1
+				"GachaBGController+GateDoor","SetRarity",1
 			);*/
 
 #pragma endregion
@@ -1095,19 +2293,68 @@ namespace
 		ADD_HOOK(RaceUIRank_Setup, "RaceUIRank.Setup(7) at %p\n");
 		ADD_HOOK(RaceUIRank_PlayPlayerRankUp, "RaceUIRank.PlayPlayerRankUp() at %p\n");
 		ADD_HOOK(RaceUIRank_PlayPlayerRankDown, "RaceUIRank.PlayPlayerRankDown() at %p\n");
-		ADD_HOOK(RaceManager_GetHorseDistanceByIndex, "RaceManager.GetHorseDistanceByIndex(int) at %p");
-		ADD_HOOK(LiveTheaterInfo_GetDefaultDressid, "LiveTheaterInfo_GetDefaultDressid(...) at %p");
-		ADD_HOOK(LiveTheaterInfo_UpdateCharaDressIds, "LiveTheaterInfo_UpdateCharaDressIds(LiveTheaterMemberInfo[]) at %p");
-		ADD_HOOK(LiveTheaterInfo_CheckDress, "LiveTheaterInfo_CheckDress(int,CharaDressIdSet) at %p");
-		printf("CustomHost:%s\n",g_customHost);
-		if (strlen(g_customHost) > 0) {
-			ADD_HOOK(Cute_Http_WWWRequest_Post, "Cute_Http_WWWRequest_Post(...) at %p");
-		}
+		ADD_HOOK(RaceManager_GetHorseDistanceByIndex, "RaceManager.GetHorseDistanceByIndex(int) at %p\n");
+		ADD_HOOK(LiveTheaterInfo_GetDefaultDressid, "LiveTheaterInfo_GetDefaultDressid(...) at %p\n");
+		ADD_HOOK(LiveTheaterInfo_UpdateCharaDressIds, "LiveTheaterInfo_UpdateCharaDressIds(LiveTheaterMemberInfo[]) at %p\n");
+		ADD_HOOK(LiveTheaterInfo_CheckDress, "LiveTheaterInfo_CheckDress(int,CharaDressIdSet) at %p\n");
+		ADD_HOOK(RaceResultScene_GetMotionVariationId, "RaceResultScene_GetMotionVariationId(int) at %p\n");
+		ADD_HOOK(RaceResultCutInHelper_LoadBodyMotion, "RaceResultCutInHelper_LoadBodyMotion(...5) at %p\n");
+		ADD_HOOK(RaceResultCutInHelper_LoadCameraMotion, "RaceResultCutInHelper_LoadCameraMotion(...5) at %p\n");
+		ADD_HOOK(RaceResultCutInHelper_LoadEarMotion, "RaceResultCutInHelper_LoadEarMotion(...5) at %p\n");
+		ADD_HOOK(RaceResultCutInHelper_LoadFacialMotion, "RaceResultCutInHelper_LoadFacialMotion(...5) at %p\n");
+		ADD_HOOK(ResourcePath_GetCharacterRaceResultMotionPath,"ResourcePath_GetCharacterRaceResultMotionPath at %p\n")
+		ADD_HOOK(RaceResultScene_PlayFinishOrderAnim, "RaceResultScene_PlayFinishOrderAnim(Action) at %p\n");
+		//ADD_HOOK(RaceResultCutInHelper_GetModelController, "RaceResultCutInHelper_GetModelController(..) at %p");
+		//ADD_HOOK(RaceResultCutInHelper_GetResultCuttCueId, "RaceResultCutInHelper_GetResultCuttCueId(int,int,int*) at %p");
+		ADD_HOOK(RaceSkillCutInHelper_PreInstantiateCharaUser, "RaceSkillCutInHelper_PreInstantiateCharaFixed at %p\n");
+		ADD_HOOK(RaceSkillCutInHelper_InitForGacha, "RaceSkillCutInHelper_InitForGacha at %p\n");
+		ADD_HOOK(Gallop_Cutin_CutinCharacter_ctor, "Gallop_Cutin_CutinCharacter_.ctor at %p\n");
+		ADD_HOOK(set_virt, "set_virt at %p\n");
+		printf("CustomHost:%s\n",g_customHost);	
+		ADD_HOOK(Cute_Http_WWWRequest_Post, "Cute_Http_WWWRequest_Post(...) at %p\n");
+		ADD_HOOK(CutInHelper_OnCreateCharacterModel, "CutInHelper_OnCreateCharacterModel at %p\n");
+		//ADD_HOOK(CutInHelper_ApplyCharacterMotion_Facial, "CutInHelper_ApplyCharacterMotion_Facial at %p\n");
+		//ADD_HOOK(CutInHelper_ApplyCharacterMotion_Ear, "CutInHelper_ApplyCharacterMotion_Ear at %p\n");
+		//ADD_HOOK(CutInHelper_GetCharaId, "CutInHelper_GetCharaId at %p\n");
+		//ADD_HOOK(CutIn_CutInCharacter_EntryModel, "CutIn_CutInCharacter_EntryModel at %p\n");
 		
 		//ADD_HOOK(BitmapTextCommon_GetFontPath, "BitmapTextCommon_GetFontPath(TextFormat.BitmapFont) at %p");
-		//ADD_HOOK(ModelLoader_CreateNormalModel, "ModelLoader_CreateNormalModel(CharacterBuildInfo) at %p");
-		//ADD_HOOK(ModelLoader_CreateModel, "ModelLoader_CreateModel(CharacterBuildInfo) at %p");
-
+		//ADD_HOOK(ModelLoader_CreateNormalModel, "ModelLoader_CreateNormalModel(CharacterBuildInfo) at %p\n");
+		//ADD_HOOK(ModelLoader_CreateModel, "ModelLoader_CreateModel(CharacterBuildInfo) at %p\n");
+		ADD_HOOK(CharacterBuildInfo_ctor, "CharacterBuildInfo_ctor at %p\n");
+		ADD_HOOK(CharacterBuildInfo_ctor_overload1, "CharacterBuildInfo_ctor_overload1 at %p\n");
+		ADD_HOOK(CharacterBuildInfo_ctor_overload2, "CharacterBuildInfo_ctor_overload2 at %p\n");
+		ADD_HOOK(StoryCharacter3D_LoadModel, "StoryCharacter3D_LoadModel at %p\n");
+		ADD_HOOK(DialogManager_PushErrorCommon, "DialogManager_PushErrorCommon at %p\n");
+		ADD_HOOK(Live_LiveTimelineCamera_AlterUpdate, "Live_LiveTimelineCamera_AlterUpdate at %p\n");
+		ADD_HOOK(Live_Cutt_AlterUpdate_CameraLookAt, "Live_Cutt_AlterUpdate_CameraLookAt at %p\n");
+		ADD_HOOK(Live_Cutt_AlterUpdate_CameraFov, "AlterUpdate_CameraFov at %p\n");
+		ADD_HOOK(Live_Cutt_AlterUpdate_CameraPos, "Live_Cutt_AlterUpdate_CameraPos at %p\n");
+		ADD_HOOK(Live_Cutt_AlterUpdate_CameraSwitcher, "Live_Cutt_AlterUpdate_CameraSwitcher at %p\n");
+		ADD_HOOK(Live_Cutt_AlterUpdate_CameraLayer, "Live_Cutt_AlterUpdate_CameraLayer at %p\n");
+		ADD_HOOK(Live_Cutt_AlterUpdate_CameraMotion, "Live_Cutt_AlterUpdate_CameraMotion at %p\n");
+		ADD_HOOK(Live_Cutt_AlterUpdate_CameraRoll, "Live_Cutt_AlterUpdate_CameraRoll at %p\n");
+		//ADD_HOOK(Live_Cutt_AlterUpdate_MultiCameraSwitcher, "Live_Cutt_AlterUpdate_MultiCameraSwitcher at %p\n");
+		//ADD_HOOK(Live_Cutt_AlterUpdate_MultiCamera, "Live_Cutt_AlterUpdate_MultiCamera at %p\n");
+		ADD_HOOK(Live_Cutt_AlterUpdate_MultiCameraLookAt, "Live_Cutt_AlterUpdate_MultiCameraLookAt at %p\n");
+		ADD_HOOK(Live_Cutt_AlterUpdate_MultiCameraPosition, "Live_Cutt_AlterUpdate_MultiCameraPosition at %p\n");
+		ADD_HOOK(Live_Cutt_AlterUpdate_MultiCameraTiltShift, "Live_Cutt_AlterUpdate_MultiCameraTiltShift at %p\n");
+		ADD_HOOK(Live_Cutt_AlterUpdate_PostEffect_DOF, "Live_Cutt_AlterUpdate_PostEffect_DOF at %p\n");
+		ADD_HOOK(Live_Cutt_AlterLateUpdate_CameraMotion, "Live_Cutt_AlterLateUpdate_CameraMotion at %p\n");
+		ADD_HOOK(Live_Cutt_AlterUpdate_EyeCameraPosition, "Live_Cutt_AlterUpdate_EyeCameraPosition at %p\n");
+		ADD_HOOK(Live_Cutt_AlterUpdate_EyeCameraLookAt, "Live_Cutt_AlterUpdate_EyeCameraLookAt at %p\n");
+		ADD_HOOK(GameSystem_SoftwareReset, " GameSystem_SoftwareReset at %p\n");
+		ADD_HOOK(GallopUtil_GotoTitleOnError, "GallopUtil_GotoTitleOnError at %p\n");
+		ADD_HOOK(TapEffectController_ctor, "TapEffectController_ctor at %p\n");
+		ADD_HOOK(Cute_Core_Device_GetPersistentDataPath, "Cute_Core_Device_GetPersistentDataPath at %p\n");
+		ADD_HOOK(unityengine_get_persistentDataPath, "unityengine_get_persistentDataPath at %p\n");
+		//ADD_HOOK(unity_font_ctor, "unity_font_ctor(string) at %p\n");
+		//ADD_HOOK(assetbundleHelper_IsNeedManifestSetup, "assetbundleHelper_IsNeedManifestSetup at %p\n");
+		//ADD_HOOK(assetbundleHelper_IsExistGallopResources, "assetbundleHelper_IsExistGallopResources at %p\n");
+		//ADD_HOOK(UnityEngine_GameObject_ctor, "UnityEngine_GameObject_ctor(string) at %p\n");
+		//ADD_HOOK(GetKeyDown, "UnityEngine.Input.GetKeyDown at %p\n");
+		//ADD_HOOK(Unity_KeyboardEvent, "Unity_KeyboardEvent at %p\n");
+		//ADD_HOOK(Live_Cutt_AlterUpdate, "Live_Cutt_AlterUpdate at %p\n");
 		//ADD_HOOK(Race_GetRankNumSmallPath, "AtlasSpritePath.Race.GetRankNumSmallPath(int) at %p");
 		//ADD_HOOK(GachaBGController_GateDoor_SetRarity, "Gallop.GachaBGController.GateDoor.SetRarity(int(enum)) at %p\n");
 		if (g_replace_font)
@@ -1145,10 +2392,18 @@ namespace
 		if (g_dump_entries)
 			dump_all_entries();
 
+		
+	}
+
+	void startThread() {
 		std::thread t1(meterDataSendThread);
 		t1.detach();
 		printf("Horse data send Thread started\n");
+
+		std::thread t2(keyDownCheckThread);
+		t2.detach();
 	}
+
 	std::string current_time()
 	{
 		auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -1172,6 +2427,7 @@ namespace
 		int compressedSize,
 		int dstCapacity)
 	{
+		lastUrl = currentUrl;
 		//printf("compressedSize=%d,dstCapacity=%d", compressedSize, dstCapacity);
 		char* decrypted = NULL;
 		//server_ip;
@@ -1214,6 +2470,7 @@ namespace
 			//lz4
 			printf("compressedSize: %d, dstCapacity:%d\n", compressedSize, dstCapacity);
 			delete[] realLZ4buff;
+			
 			//ret = compressedSize;
 			//memcpy(decrypted,dst,compressedSize);
 		}
@@ -1221,7 +2478,8 @@ namespace
 		printf("Server Response: %d Bytes\n",ret);
 		
 		if (g_saveMsgPack) {
-			auto out_path = std::string("CarrotJuicer\\").append(current_time()).append("R.msgpack");
+
+			auto out_path = std::string("CarrotJuicer\\").append(current_time()).append(ReplaceAll(currentUrl.path(),"/","_")).append("R.msgpack");
 			write_file(out_path, decrypted, ret);
 			printf("wrote response to %s\n", out_path.c_str());
 		}
@@ -1229,11 +2487,13 @@ namespace
 		
 		if (g_sendserver) {
 			printf("------Real Cygames server -> modding server(local) -> Client------\n");
-		
+			httplib::Headers headers = {
+				{ "Url", lastUrl.str() }
+			};
 			
 			httplib::Client cli(server_ip,server_port);
 			std::string data(decrypted, ret);
-			auto res = cli.Post("/umamusume_uploadmsgpack/live",data, "application/x-msgpack");
+			auto res = cli.Post("/umamusume_uploadmsgpack/live",headers, data, "application/x-msgpack");
 			res->status;
 			const char* returned = res->body.c_str();			
 			printf("\n");
@@ -1266,6 +2526,7 @@ namespace
 		int srcSize,
 		int dstCapacity)
 	{
+		
 		//char* decrypted = new char[dstCapacity] {};
 		char* raw_data = new char[srcSize] {};
 		memcpy(raw_data, src, srcSize);
@@ -1273,7 +2534,11 @@ namespace
 			httplib::Client cli(server_ip, server_port);
 			std::string data(raw_data, srcSize);
 			printf("------Client -> modding server(local) -> Real Cygames server------\n");
-			auto res = cli.Post("/umamusume_uploadmsgpack/uma_client_request_toserver", data, "application/x-msgpack");
+			httplib::Headers headers = {
+				{ "Url", lastUrl.str() }
+			};
+		
+			auto res = cli.Post("/umamusume_uploadmsgpack/uma_client_request_toserver", headers, data, "application/x-msgpack");
 			res->status;
 			const char* returned = res->body.c_str();			
 			size_t clength = res->body.length();
@@ -1292,8 +2557,14 @@ namespace
 			//auto out_path = std::string("CarrotJuicer\\").append(current_time()).append("Q.msgpack");
 			//write_file(out_path, src, srcSize);
 			//printf("wrote raw clinet request to %s\n", out_path.c_str());
+			if (g_saveMsgPack) {
+				auto out_path = std::string("CarrotJuicer\\").append(current_time()).append(ReplaceAll(lastUrl.path(), "/", "_")).append("Q.msgpack");
+				write_file(out_path, src, srcSize);
+				printf("wrote clinet request to %s\n", out_path.c_str());
+			}
 			printf("-------------------------------------------------------------------------\n");
 			delete[] raw_data;
+			
 			return ret;
 		}
 		else {
@@ -1311,7 +2582,7 @@ namespace
 			//	src, dst, srcSize, dstCapacity);
 			printf("Raw Client data: %d Bytes (Compressed/Encrypted to %d bytes) -> \n", srcSize, ret);
 			if (g_saveMsgPack) {
-				auto out_path = std::string("CarrotJuicer\\").append(current_time()).append("Q.msgpack");
+				auto out_path = std::string("CarrotJuicer\\").append(current_time()).append(ReplaceAll(lastUrl.path(), "/", "_")).append("Q.msgpack");
 				write_file(out_path, src, srcSize);
 				printf("wrote clinet request to %s\n", out_path.c_str());
 			}
@@ -1324,18 +2595,24 @@ namespace
 	}
 	void bootstrap_carrot_juicer()
 	{
-		std::filesystem::create_directory("CarrotJuicer");
+		if (g_saveMsgPack) {
+			std::filesystem::create_directory("CarrotJuicer");
+		}
+
+		
 
 		auto libnative_module = GetModuleHandle("libnative.dll");
 		printf("libnative.dll at %p\n", libnative_module);
 		if (libnative_module == nullptr)
 		{
+			printf("[libnativeHook] Error: libnative.dll is nullptr\n");
 			return;
 		}
 
 		auto LZ4_decompress_safe_ext_ptr = GetProcAddress(libnative_module, "LZ4_decompress_safe_ext");
 		printf("LZ4_decompress_safe_ext at %p\n", LZ4_decompress_safe_ext_ptr);
 		if (LZ4_decompress_safe_ext_ptr == nullptr) {
+			printf("[libnativeHook] Error: LZ4_decompress_safe_ext is nullptr\n");
 			return;
 		}
 		MH_CreateHook(LZ4_decompress_safe_ext_ptr, LZ4_decompress_safe_ext_hook, &LZ4_decompress_safe_ext_orig);
@@ -1344,6 +2621,7 @@ namespace
 		auto LZ4_compress_default_ext_ptr = GetProcAddress(libnative_module, "LZ4_compress_default_ext");
 		printf("LZ4_compress_default_ext at %p\n", LZ4_compress_default_ext_ptr);
 		if (LZ4_compress_default_ext_ptr == nullptr) {
+			printf("[libnativeHook] Error: LZ4_compress_default_ext is nullptr\n");
 			return;
 		}
 		MH_CreateHook(LZ4_compress_default_ext_ptr, LZ4_compress_default_ext_hook, &LZ4_compress_default_ext_orig);
@@ -1352,8 +2630,10 @@ namespace
 
 
 	
-}
 
+
+
+ 
 bool init_hook()
 {
 	std::ifstream config_stream{ "config.json" };
@@ -1435,6 +2715,8 @@ void DumpHex(const void* data, size_t size) {
 		}
 	}
 }
+
+
 
 DWORD getCurrentDisplayHz() {
 	DEVMODE devmode;

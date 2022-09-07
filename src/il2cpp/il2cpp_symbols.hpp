@@ -283,10 +283,11 @@ public:
 };
 
 //Gallop.MasterDressData
-struct __declspec(align(8)) MasterDressData {
+struct MasterDressData {
 public:
 	//long dummy1;
 	//long dummy2;
+	char dummy[0x10];
 	int32_t Id;
 	int32_t ConditionType;
 	bool HaveMini;
@@ -304,6 +305,7 @@ public:
 	int32_t IsDirt;
 	int32_t HeadSubId;
 	int32_t UseSeason;
+	char dummy1[4];
 	Il2CppString* DressColorMain;
 	Il2CppString* DressColorSub;
 	int32_t ColorNum;
@@ -317,12 +319,9 @@ public:
 
 
 //Gallop.CharacterBuildInfo
-struct __declspec(align(8)) CharacterBuildInfo {
+struct CharacterBuildInfo {
 public:
-	int dummy1;
-	int dummy2;
-	int dummy3;
-	int dummy4;
+	char dummy[0x10];
 	int32_t _cardId;
 	int32_t _charaId;
 	int32_t _mobId;
@@ -369,10 +368,46 @@ public:
 	int32_t _loadHashKey;
 	bool _isPreCreatedLoadHashKey;
 	bool _initialized;
+
+
+};
+
+//Gallop.CutIn.Cutt.TimelineKeyCharacterType
+enum TimelineKeyCharacterType
+{
+	User,
+	Target,
+	FixRank,
+	FixCharaId,
+	CardId,
+	Mob
+};
+
+//Gallop.CutIn.CutInCharacterCreateInfo
+struct CutInCharacterCreateInfo {
+	char dummy[0x10];
+	TimelineKeyCharacterType _characterType;
+	int _charaIndex;
+	void* _parent;
+	int _charaId;
+	int _clothId;
+	int _headId;
+	bool IsUseDressDataHeadModelSubId;
+	int _zekkenNo;
+	bool _isWet;
+	bool _isDirt;
+	int OverrideClothCategory;
 };
 
 
+//libnative.sqlite3.dbconnection
+struct Connection {
+	char dummy[0x10];
+	uintptr_t Handle;
+	Il2CppString* dbPath;
+};
 
+//int charaS[] = {1001,1002,1003,1004,1005,1006,1007,1008,1009,1010,1011,1012,1013,1014,1015};
 
 template<typename T>
 struct Nullable
