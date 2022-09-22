@@ -19,7 +19,7 @@ Connection* masterDBconnection = nullptr;
 Url lastUrl;
 Url currentUrl;
 void startThread();
-
+void hook_beforeboot();
 
 WSADATA wsa;
 SOCKET s;
@@ -49,6 +49,8 @@ using namespace std;
 		}
 		return str;
 	}
+
+	
 
 	std::vector < std::string > explode(const std::string& str,
 		const char& ch) {
@@ -201,14 +203,15 @@ using namespace std;
 		wprintf(L"loaded %s\n", path);
 		// GameAssembly.dll code must be loaded and decrypted while loading criware library
 		if (path == L"advapi32"s) {
-			path_game_assembly();
+			hook_beforeboot();
 		}
 		else if (path == L"cri_ware_unity.dll"s)
 		{
+			printf("criwareunity\n");
 			currenthWnd = GetActiveWindow();
-			char buf[100];
-			sprintf_s(buf, "umamusume_cu (%d patch applied)", patchCount);
-
+			char buf[256];
+			sprintf_s(buf, "umamusume_L (%d개 패치 적용됨)", patchCount);
+			path_game_assembly();
 			SetWindowText(currenthWnd, buf);
 			//GameAssembly ´ýÇÁ
 			if (g_dumpGamedll) {
@@ -221,12 +224,12 @@ using namespace std;
 				ga = nullptr;
 			}
 			
-			HMODULE sq = GetModuleHandle("baselib.dll");
-			if (sq != nullptr) {
-				//std::string exe_name = module_filename(NULL);
-				printf("Trying to dump baselib.dll...\n");
-				pedump(sq, "dumped_baselib.dll");
-			}
+			//HMODULE sq = GetModuleHandle("baselib.dll");
+			//if (sq != nullptr) {
+			//	//std::string exe_name = module_filename(NULL);
+			//	printf("Trying to dump baselib.dll...\n");
+			//	pedump(sq, "dumped_baselib.dll");
+			//}
 			//sq = nullptr;
 			startThread();
 			bootstrap_carrot_juicer();
@@ -253,8 +256,12 @@ using namespace std;
 	void* localize_get_orig = nullptr;
 	Il2CppString* localize_get_hook(int id)
 	{
+		
+
 		auto orig_result = reinterpret_cast<decltype(localize_get_hook)*>(localize_get_orig)(id);
 		auto result = local::get_localized_string(id);
+		
+		wprintf(L"Get textid : %d, return %s", orig_result->start_char);
 
 		return result ? result : orig_result;
 	}
@@ -731,6 +738,11 @@ using namespace std;
 							
 	}
 
+	void* apply_graphics_quality_orig = nullptr;
+	void apply_graphics_quality_hook(Il2CppObject* _this, int quality, bool force)
+	{
+		reinterpret_cast<decltype(apply_graphics_quality_hook)*>(apply_graphics_quality_orig)(_this, 0x04, true);
+	}
 	
 	/*void* BitmapTextCommon_GetFontPath_orig = nullptr;
 	Il2CppString* BitmapTextCommon_GetFontPath_hook(void* _this,void* fontType) {
@@ -765,7 +777,7 @@ using namespace std;
 	int RaceResultScene_GetMotionVariationId_hook(int charaId) {
 		printf("GetMotionVariationId : charaId=%d\n", charaId);
 		if (c_raceResultCutinMotionChara > -1) {
-			charaId = c_raceResultCutinMotionChara;
+			charaId = 1007;// c_raceResultCutinMotionChara;
 			//dress->CharaId = c_raceResultCutinMotionChara;
 		}
 		return reinterpret_cast<decltype(RaceResultScene_GetMotionVariationId_hook)*>
@@ -1565,6 +1577,29 @@ using namespace std;
 		return reinterpret_cast<decltype(set_virt_hook)*>(set_virt_orig)(true);
 	}
 
+	void* textutil_getmastertext_orig = nullptr;
+	Il2CppString* textutil_getmastertext_hook(int category, int index) {
+		auto ret_orig = reinterpret_cast<decltype(textutil_getmastertext_hook)*>(textutil_getmastertext_orig)(category, index);
+		string test = "키무라";
+		wprintf(L"GetMasterText category=%d, index=%d, str=%s\n", category, index, ret_orig->start_char);
+		//FILE* fLog;
+		//fLog = _wfopen(L"log.txt", L"w");
+		//if (fLog != NULL)
+		//{
+		//	fwrite(ret_orig->start_char, sizeof(WCHAR), wcslen(ret_orig->start_char), fLog);
+		//	fclose(fLog);
+		//}
+		return il2cpp_string_new(test.data());
+	}
+
+	void* textutil_getstatictext_orig = nullptr;
+	Il2CppString* textutil_getstatictext_hook(int textid) {
+		auto ret_orig = reinterpret_cast<decltype(textutil_getstatictext_hook)*>(textutil_getstatictext_orig)(textid);
+		string test = "키무라2";
+		wprintf(L"GetStaticText Textid%d, str=%s\n", textid, ret_orig->start_char);
+		return il2cpp_string_new(test.data());
+	}
+
 	/*void* unity_font_ctor_orig = nullptr;
 	void* unity_font_ctor_hook(void* _this, Il2CppString* name) {
 		wprintf(L"Font Load: %s\n", name->start_char);
@@ -1697,6 +1732,16 @@ using namespace std;
 				"umamusume.dll", "Gallop",
 				"StandaloneWindowResize", "set_IsVirt", 1
 			));
+
+		auto textutil_getmastertext_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"TextUtil", "GetMasterText", 2
+		);
+
+		auto textutil_getstatictext_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"TextUtil", "GetStaticText", 1
+		);
 
 		get_resolution = reinterpret_cast<Resolution_t * (*)(Resolution_t*)>(
 			il2cpp_symbols::get_method_pointer(
@@ -2208,12 +2253,18 @@ using namespace std;
 			"Cute.Core.Assembly.dll", "Cute.Core",
 			"Device", "GetPersistentDataPath", 0
 		));
+
+		auto apply_graphics_quality_addr = reinterpret_cast<void (*)(
+			Il2CppObject*, int, bool)>(il2cpp_symbols::get_method_pointer(
+				"umamusume.dll",
+				"Gallop",
+				"GraphicSettings", "ApplyGraphicsQuality", 2));
 		
-		auto unityengine_get_persistentDataPath_addr = reinterpret_cast<Il2CppString*(*)()>(
+		/*auto unityengine_get_persistentDataPath_addr = reinterpret_cast<Il2CppString*(*)()>(
 			il2cpp_symbols::get_method_pointer(
 				"UnityEngine.CoreModule.dll", "UnityEngine",
 				"Application", "get_persistentDataPath", 0
-			));
+			));*/
 
 		/*auto unity_font_ctor_addr = reinterpret_cast<void *(*)(void* , Il2CppString*)>(
 			il2cpp_symbols::get_method_pointer(
@@ -2313,6 +2364,7 @@ using namespace std;
 		printf("CustomHost:%s\n",g_customHost);	
 		ADD_HOOK(Cute_Http_WWWRequest_Post, "Cute_Http_WWWRequest_Post(...) at %p\n");
 		ADD_HOOK(CutInHelper_OnCreateCharacterModel, "CutInHelper_OnCreateCharacterModel at %p\n");
+
 		//ADD_HOOK(CutInHelper_ApplyCharacterMotion_Facial, "CutInHelper_ApplyCharacterMotion_Facial at %p\n");
 		//ADD_HOOK(CutInHelper_ApplyCharacterMotion_Ear, "CutInHelper_ApplyCharacterMotion_Ear at %p\n");
 		//ADD_HOOK(CutInHelper_GetCharaId, "CutInHelper_GetCharaId at %p\n");
@@ -2347,7 +2399,10 @@ using namespace std;
 		ADD_HOOK(GallopUtil_GotoTitleOnError, "GallopUtil_GotoTitleOnError at %p\n");
 		ADD_HOOK(TapEffectController_ctor, "TapEffectController_ctor at %p\n");
 		ADD_HOOK(Cute_Core_Device_GetPersistentDataPath, "Cute_Core_Device_GetPersistentDataPath at %p\n");
-		ADD_HOOK(unityengine_get_persistentDataPath, "unityengine_get_persistentDataPath at %p\n");
+		ADD_HOOK(textutil_getmastertext, "textutil_getmastertext at %p\n");
+		ADD_HOOK(textutil_getstatictext, "textutil_getstatictext at %p\n");
+		ADD_HOOK(apply_graphics_quality, "Gallop.GraphicSettings.ApplyGraphicsQuality at %p\n");
+		//ADD_HOOK(unityengine_get_persistentDataPath, "unityengine_get_persistentDataPath at %p\n");
 		//ADD_HOOK(unity_font_ctor, "unity_font_ctor(string) at %p\n");
 		//ADD_HOOK(assetbundleHelper_IsNeedManifestSetup, "assetbundleHelper_IsNeedManifestSetup at %p\n");
 		//ADD_HOOK(assetbundleHelper_IsExistGallopResources, "assetbundleHelper_IsExistGallopResources at %p\n");
@@ -2395,6 +2450,23 @@ using namespace std;
 		
 	}
 
+	void hook_beforeboot() {
+		printf("Patch before game boot...\n");
+
+		auto il2cpp_module = GetModuleHandle("GameAssembly.dll");
+
+		// load il2cpp exported functions
+		il2cpp_symbols::init(il2cpp_module);
+
+		auto unityengine_get_persistentDataPath_addr = reinterpret_cast<Il2CppString * (*)()>(
+			il2cpp_symbols::get_method_pointer(
+				"UnityEngine.CoreModule.dll", "UnityEngine",
+				"Application", "get_persistentDataPath", 0
+			));
+		MH_CreateHook((LPVOID)unityengine_get_persistentDataPath_addr, unityengine_get_persistentDataPath_hook, &unityengine_get_persistentDataPath_orig);
+		MH_EnableHook((LPVOID)unityengine_get_persistentDataPath_addr);
+	}
+
 	void startThread() {
 		std::thread t1(meterDataSendThread);
 		t1.detach();
@@ -2433,6 +2505,10 @@ using namespace std;
 		//server_ip;
 		int ret = 0;
 		
+		char buf[256];
+		sprintf_s(buf, "umamusume_L [%s %d]", currentUrl.path().c_str(), compressedSize);
+		SetWindowText(currenthWnd, buf);
+
 		if (g_lz4Encrypt) {
 			decrypted = new char[dstCapacity];
 			ret = reinterpret_cast<decltype(LZ4_decompress_safe_ext_hook)*>(LZ4_decompress_safe_ext_orig)(

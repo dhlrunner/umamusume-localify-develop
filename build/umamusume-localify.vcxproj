@@ -66,7 +66,7 @@
       <MinimalRebuild>false</MinimalRebuild>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalOptions>/std:c++latest /Zm1000 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/std:c++latest /Zm1000 /utf-8 %(AdditionalOptions)</AdditionalOptions>
       <AdditionalIncludeDirectories>..\src\PEDump\;..\src\lz4;..\src\;..\deps\rapidjson\include;..\deps\minhook\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>

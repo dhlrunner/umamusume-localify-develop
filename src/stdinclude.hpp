@@ -39,7 +39,10 @@
 
 #include "lz4.h"
 
+#include <cstdio>
+
 #pragma comment(lib,"ws2_32.lib") //Winsock Library
+#pragma execution_character_set( "utf-8" )
 
 extern int patchCount;
 

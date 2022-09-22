@@ -471,6 +471,9 @@ namespace
 		_ = freopen("CONOUT$", "w", stderr);
 		_ = freopen("CONIN$", "r", stdin);
 
+		//SetConsoleOutputCP(65001);
+		//setlocale(LC_CTYPE, "");
+		//std::wcout.imbue(std::locale("", std::locale::ctype));
 		SetConsoleTitle("Umamusume - Debug Console");
 
 		// set this to avoid turn japanese texts into question mark
@@ -582,7 +585,8 @@ int __stdcall DllMain(HINSTANCE, DWORD reason, LPVOID)
 			
 
 		std::thread init_thread([dicts]() {
-			create_debug_console();
+			if (g_enable_console)
+				create_debug_console();
 			logger::init_logger();
 			local::load_textdb(&dicts);
 			printf("init_thread\n");
