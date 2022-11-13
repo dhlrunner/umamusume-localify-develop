@@ -2402,7 +2402,7 @@ using namespace std;
 		ADD_HOOK(textutil_getmastertext, "textutil_getmastertext at %p\n");
 		ADD_HOOK(textutil_getstatictext, "textutil_getstatictext at %p\n");
 		ADD_HOOK(apply_graphics_quality, "Gallop.GraphicSettings.ApplyGraphicsQuality at %p\n");
-		//ADD_HOOK(unityengine_get_persistentDataPath, "unityengine_get_persistentDataPath at %p\n");
+		ADD_HOOK(unityengine_get_persistentDataPath, "unityengine_get_persistentDataPath at %p\n");
 		//ADD_HOOK(unity_font_ctor, "unity_font_ctor(string) at %p\n");
 		//ADD_HOOK(assetbundleHelper_IsNeedManifestSetup, "assetbundleHelper_IsNeedManifestSetup at %p\n");
 		//ADD_HOOK(assetbundleHelper_IsExistGallopResources, "assetbundleHelper_IsExistGallopResources at %p\n");
