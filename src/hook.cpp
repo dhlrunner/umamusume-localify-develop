@@ -1,11 +1,24 @@
 ﻿#define _WINSOCK_DEPRECATED_NO_WARNINGS 1
+#define STB_IMAGE_IMPLEMENTATION
 #define _CRT_SECURE_NO_WARNINGS 1
 #define MAX_HORSE_NUM 18
+#define IMGUI_DEFINE_MATH_OPERATORS
 
 #include <stdinclude.hpp>
 
+static ImVector<ImRect> s_GroupPanelLabelStack;
+
 HWND currenthWnd = NULL;
+HWND imguiWnd = NULL;
+bool hook_end = false;
+bool imguiShow = false;
 bool g_sendserver = true;
+bool beforePatched = false;
+bool g_gotoTitleOnError = true; //N
+bool g_walkMotionAllUrara = false;
+bool g_homeAllDiamond = false;
+bool g_winMotion564 = false;
+bool imgui_settingwnd_open = false;
 int server_port = 80;
 char server_ip[256];
 DWORD getCurrentDisplayHz();
@@ -15,15 +28,24 @@ void adjust_size(int w = 0, int h=0);
 void set_resolution_hook(int, int, bool);
 void (*sql_query)(Connection* connection, Il2CppString* sql) = nullptr;
 bool (*sql_exec)() = nullptr;
+Il2CppString* (*GetCharaNameByCharaId)(int) = nullptr;
+Il2CppObject* masterDB_instance = nullptr;
 Connection* masterDBconnection = nullptr;
+int live_currentFrame = 0;
+Vector3_t liveCam_Lookat{};
+Vector3_t liveCam_pos1{};
+Vector3_t liveCam_pos2{};
 Url lastUrl;
 Url currentUrl;
 void startThread();
 void hook_beforeboot();
+//void setCustomFont();
+
 
 WSADATA wsa;
 SOCKET s;
 struct sockaddr_in server;
+Il2CppObject* ChangeScreenOrientation_hook(ScreenOrientation targetOrientation, bool isForce);
 
 #pragma comment(lib, "ws2_32")
 
@@ -38,8 +60,45 @@ using namespace std;
 	int count = 0;
 	float horseMeters[MAX_HORSE_NUM] = {0.1};
 	float lastMeter = 0.0;
-	bool (*GetKeyDown)(int) = nullptr;
+	bool (*GetKeyDown)(KeyCode) = nullptr;
+	bool (*GetKey)(KeyCode) = nullptr;
 	void (*TapEffect_Disable)(void*);
+	bool isKimuraChallenge = false;
+
+	void (*SoftwareReset)(void*);
+	void (*LoadScene)(Il2CppString*, LoadSceneParameters*);
+	void (*set_TimeScale)(float);
+	float (*get_TimeScale)();
+	void* (*UIManager_GetCanvasScalerList)(void*);
+	bool showFinishOrderFlash = true;
+
+
+	void SignalHandler(int signal)
+	{
+		printf("Signal %d", signal);
+		throw "!Access Violation!";
+	}
+
+
+	BOOL EnableCloseButton(const HWND hwnd, const BOOL bState)
+	{
+		HMENU   hMenu;
+		UINT    dwExtra;
+
+		if (hwnd == NULL) return FALSE;
+		if ((hMenu = GetSystemMenu(hwnd, FALSE)) == NULL) return FALSE;
+		dwExtra = bState ? MF_ENABLED : (MF_DISABLED | MF_GRAYED);
+		return EnableMenuItem(hMenu, SC_CLOSE, MF_BYCOMMAND | dwExtra) != -1;
+	}
+
+	bool hasEnding(std::string const& fullString, std::string const& ending) {
+		if (fullString.length() >= ending.length()) {
+			return (0 == fullString.compare(fullString.length() - ending.length(), ending.length(), ending));
+		}
+		else {
+			return false;
+		}
+	}
 
 	string ReplaceAll(std::string str, const std::string& from, const std::string& to) {
 		size_t start_pos = 0;
@@ -50,7 +109,41 @@ using namespace std;
 		return str;
 	}
 
-	
+
+
+	void ResetGame() {
+		LoadSceneParameters p = { 0 };
+		p.LoadSceneMode = 0; //Single
+		p.LocalPhysicsMode = 0;
+		LoadScene(il2cpp_string_new(string("_Boot").data()), &p);
+	}
+
+
+
+	void* s2c_orig = nullptr;
+	Il2CppChar* s2c_hook(void* _this)
+	{
+
+		Il2CppChar* ret = reinterpret_cast<decltype(s2c_hook)*>(s2c_orig)(_this);
+
+		return ret;
+
+	}
+
+	string UmaGetString(Il2CppString_unk* in, int debug = 1) {
+		string out = "";
+		long long length = s2c_hook(in)->length;
+		//printf("length is %d\n", length);
+		short* start = &(s2c_hook(in)->start_char);
+		//printf("start is %p\n", start);
+		for (int i = 0; i <= length - 1; i++) {
+			if (debug == 1) {
+				printf("Text is %p\n", *start);
+			}
+			out += *(start++);
+		}
+		return out;
+	}
 
 	std::vector < std::string > explode(const std::string& str,
 		const char& ch) {
@@ -111,15 +204,81 @@ using namespace std;
 
 	void keyDownCheckThread() {
 		printf("KeyDownCheckThread IN!!!\n");
+		
 		while (true) {
-			bool ret = GetKeyDown(0x73); //S
+			bool ret = GetKeyDown(KeyCode::S); //S
+			bool ctrl = GetKey(KeyCode::LeftControl); //LCtrl
+			bool alt = GetKey(KeyCode::LeftAlt);
+			bool f12 = GetKeyDown(KeyCode::F12);
 			if (ret) {
 				printf("S is Pressed!!!!\n");
-				while (GetKeyDown(0x73)) { }
+				while (GetKeyDown(KeyCode::S)) { }
 
 				c_stopLiveCam = !c_stopLiveCam;
 				printf("LiveCam Stop %s.\n",c_stopLiveCam ? "Enabled" : "Disabled");
-			}				
+			}
+			if (ctrl) {
+				printf("LCtrl is pressed!!!!!\n");
+				while (ctrl) {	
+					//printf("check R\n");
+					if (GetKeyDown(KeyCode::R)) {
+						printf("Lctrl + R pressed, reset game\n");
+						ResetGame();
+						while (GetKey(KeyCode::R));
+						break;
+					} //R
+					else if (GetKeyDown(KeyCode::P)) { //P
+						if (get_TimeScale() <= 0.0) {
+							set_TimeScale(1.0);
+						}
+						else {
+							set_TimeScale(0.0);
+						}
+						printf("Lctrl + P pressed, Set game TimeScale to %.2f\n",get_TimeScale());
+						while (GetKey(KeyCode::P));
+						break;
+					}
+					else if (GetKey(KeyCode::PageUp)) {
+						set_TimeScale(get_TimeScale() + 0.05);
+						printf("Set Timescale %.2f\n", get_TimeScale());
+						Sleep(100);
+						//while (GetKey(KeyCode::PageUp));
+						//break;
+					}
+					else if (GetKey(KeyCode::PageDown)) {
+						set_TimeScale(get_TimeScale() - 0.05);
+						printf("Set Timescale %.2f\n", get_TimeScale());
+						Sleep(100);
+						//while (GetKey(KeyCode::PageDown));
+						//break;
+					}
+					else if (GetKeyDown(KeyCode::End)) {
+						set_TimeScale(1.0);
+						printf("Reset Timescale to %.2f\n", get_TimeScale());
+						while (GetKey(KeyCode::PageDown));
+						break;
+					}
+					ctrl = GetKey(KeyCode::LeftControl);
+				}
+			}
+			if (f12) {
+				printf("F12 is Pressed!!!!\n");
+				while (GetKeyDown(KeyCode::F12)) {}
+
+				//bool b = ShowWindow(imguiWnd, imguiShow ? SW_HIDE : SW_SHOW);
+				//imguiShow = !imguiShow;
+				imgui_settingwnd_open = !imgui_settingwnd_open;
+				printf("Show setting screen \n");
+			}
+
+			/*else if (alt) {
+				printf("LAlt is pressed!!!!!\n");
+				while (alt) {
+					
+					alt = GetKey(KeyCode::LeftAlt);
+				}
+								
+			}*/
 			//std::this_thread::sleep_for(std::chrono::milliseconds(5));
 		}
 	}
@@ -204,18 +363,31 @@ using namespace std;
 		// GameAssembly.dll code must be loaded and decrypted while loading criware library
 		if (path == L"advapi32"s) {
 			hook_beforeboot();
+			//imguiwindow();
 		}
 		else if (path == L"cri_ware_unity.dll"s)
 		{
 			printf("criwareunity\n");
 			currenthWnd = GetActiveWindow();
-			char buf[256];
-			sprintf_s(buf, "umamusume_L (%d개 패치 적용됨)", patchCount);
+			wchar_t buf[256];
+			swprintf_s(buf, L"umamusume_L (%d개 패치 적용됨)", patchCount);
+
+			/*RECT rect;
+			HDC wdc = GetWindowDC(currenthWnd);
+			GetClientRect(currenthWnd, &rect);
+			SetTextColor(wdc, 0x00000000);
+			SetBkMode(wdc, TRANSPARENT);
+			rect.left = 0;
+			rect.top = 0;
+			DrawText(wdc, "message", -1, &rect, DT_SINGLELINE | DT_NOCLIP);
+			DeleteDC(wdc);*/
+
 			path_game_assembly();
 			SetWindowText(currenthWnd, buf);
+			hook_end = true;
 			//GameAssembly ´ýÇÁ
 			if (g_dumpGamedll) {
-				HMODULE ga = GetModuleHandle("GameAssembly.dll");
+				HMODULE ga = GetModuleHandle(L"GameAssembly.dll");
 				if (ga != nullptr) {
 					//std::string exe_name = module_filename(NULL);
 					printf("Trying to dump GameAssembly.dll...\n");
@@ -236,6 +408,42 @@ using namespace std;
 			MH_DisableHook(LoadLibraryW);
 			MH_RemoveHook(LoadLibraryW);
 
+			//Il2CppObject* dbConn = il2cpp_object_new((Il2CppClass*)il2cpp_symbols::get_class("LibNative.Runtime.dll", "LibNative.Sqlite3", "Connection"));
+
+			//printf("il2cppobject_new %p\n",dbConn->klass);
+
+			//auto open = reinterpret_cast<bool (*)(Il2CppObject * _dbConnInstance, Il2CppString* filename, Il2CppString* vfsname, char* key, int cipherType)>(il2cpp_class_get_method_from_name((Il2CppClass*)dbConn->klass, "Open", 4)->methodPointer);
+			//
+			//printf("il2cppobject_new open = %p\n", &open);
+
+			//printf("open=%d\n", open(dbConn, il2cpp_string_new("D:/code/Visual Studio/repos/MalEditor/MalEditor/bin/Debug/data/translate/translate_ko.db"), nullptr, nullptr, 1));
+
+			//auto get_handle = reinterpret_cast<uintptr_t (*)(Il2CppObject * _dbConnInstance)>(il2cpp_class_get_method_from_name((Il2CppClass*)dbConn->klass, "get_DBHandle", 0)->methodPointer);
+			//auto get_path = reinterpret_cast<Il2CppString* (*)(Il2CppObject * _dbConnInstance)>(il2cpp_class_get_method_from_name((Il2CppClass*)dbConn->klass, "get_dbPath", 0)->methodPointer);
+
+			////FieldInfo* handleField = { il2cpp_class_get_field_from_name((Il2CppClass*)dbConn->klass, "DBHandle") };
+			////FieldInfo* pathField = { il2cpp_class_get_field_from_name((Il2CppClass*)dbConn->klass, "dbPath") };
+			//
+			//Connection translateDB = {};
+			//translateDB.dbPath = get_path(dbConn);
+			//translateDB.Handle = get_handle(dbConn);
+
+			////il2cpp_field_get_value(dbConn, handleField, (void*)translateDB.Handle);
+			////il2cpp_field_get_value(dbConn, pathField, (void*)translateDB.dbPath);
+
+			//wprintf(L"translatedbhandle = %p, path = %s\n", translateDB.Handle, translateDB.dbPath->start_char);
+
+			//Il2CppObject* dbQuery = il2cpp_object_new((Il2CppClass*)il2cpp_symbols::get_class("LibNative.Runtime.dll", "LibNative.Sqlite3", "Query"));
+			//auto query = reinterpret_cast<void (*)(Il2CppObject* _instance, Connection* conn, Il2CppString* querystr)>(il2cpp_symbols::get_method_pointer("LibNative.Runtime.dll", "LibNative.Sqlite3", "Query",".ctor",2));
+			//auto query_exec = reinterpret_cast<bool (*)(Il2CppObject * _instance)>(il2cpp_symbols::get_method_pointer("LibNative.Runtime.dll", "LibNative.Sqlite3", "Query", "Exec", 0));
+			//auto query_GetText = reinterpret_cast<Il2CppString* (*)(Il2CppObject * _instance,int idx)>(il2cpp_symbols::get_method_pointer("LibNative.Runtime.dll", "LibNative.Sqlite3", "Query", "GetText", 1));
+			//query(dbQuery,&translateDB, il2cpp_string_new("select * from text_ko_kr;"));
+			//bool r = query_exec(dbQuery);
+			//printf("Exec = %d\n", r);
+			//Il2CppString* q_res = query_GetText(dbQuery, 2);
+			//wprintf(L"GetText = %s\n", q_res->start_char);
+
+			
 			// use original function beacuse we have unhooked that
 			return LoadLibraryW(path);
 			//GetModuleHandle()
@@ -261,7 +469,12 @@ using namespace std;
 		auto orig_result = reinterpret_cast<decltype(localize_get_hook)*>(localize_get_orig)(id);
 		auto result = local::get_localized_string(id);
 		
-		wprintf(L"Get textid : %d, return %s", orig_result->start_char);
+		if (isKimuraChallenge) {
+			string kim = "키무라";
+			return il2cpp_string_new(kim.data());
+		}
+
+		//wprintf(L"Get textid : %d, return %s\n", id,orig_result->start_char);
 
 		return result ? result : orig_result;
 	}
@@ -269,7 +482,7 @@ using namespace std;
 	std::unordered_map<void*, bool> text_queries;
 
 	void* query_ctor_orig = nullptr;
-	void* query_ctor_hook(void* _this, Connection* conn, Il2CppString* sql)
+	void* query_ctor_hook(Il2CppObject* _this, Connection* conn, Il2CppString* sql)
 	{
 		auto ssql = std::wstring(sql->start_char);
 
@@ -282,9 +495,11 @@ using namespace std;
 		}
 
 		//wprintf(L"DBConnection info: Handle=%p dbPath=%s\n",conn->Handle,conn->dbPath->start_char);
-
-		if (masterDBconnection == nullptr && std::wstring(conn->dbPath->start_char).find(L"master.db")) {
+		wstring path = conn->dbPath->start_char;
+		//bool end = hasEnding(string(path.begin(), path.end()),"master.mdb");
+		if (masterDBconnection == nullptr && hasEnding(string(path.begin(), path.end()), "master.mdb")) {
 			masterDBconnection = conn;
+			masterDB_instance = _this;
 			wprintf(L"Set masterDBConnection Handle=%p dbPath=%s\n", conn->Handle, conn->dbPath->start_char);
 			//if (std::filesystem::exists("firstrun.sql")) {
 			//	wstring sqlQuery = readFileIntoString("firstrun.sql");
@@ -412,32 +627,49 @@ using namespace std;
 			(GachaBGController_SetGateDoorRarity_orig)(_this,doorindex);
 	}
 
-	void* LiveTitleController_Setup_orig = nullptr;
-	void LiveTitleController_Setup_hook(void* _this, LiveData* livedata, bool isAdjustForDialog = false){
-		//wprintf(L"%s", std::wstring(title->start_char).c_str());
-		printf("LiveTitle_Setup: [MusicID=%d, LiveMemberNumber=%d]\n", livedata->MusicId,livedata->LiveMemberNumber);
-		return reinterpret_cast<decltype(LiveTitleController_Setup_hook)*>
-			(LiveTitleController_Setup_orig)(_this, livedata,isAdjustForDialog);
-	}
-	void* LiveTitleController_FadeIn_orig = nullptr;
-	void LiveTitleController_FadeIn_hook(void* _this, float duration, float currentTime) {
-		printf("Title_FadeIn %.5f, %.5f\n", duration, currentTime);
-		if (g_showLiveTitleWindow) {
-			return reinterpret_cast<decltype(LiveTitleController_FadeIn_hook)*>
-				(LiveTitleController_FadeIn_orig)(_this, duration, currentTime);
+	void* FadeGui_SetAlpha_orig = nullptr;
+	void FadeGui_SetAlpha_hook(Il2CppObject* _this, float alpha) {
+		
+		if (!g_showLiveTitleWindow) {
+			alpha = 0.0f;
 		}
-		return;
+
+		return reinterpret_cast<decltype(FadeGui_SetAlpha_hook)*>
+			(FadeGui_SetAlpha_orig)(_this, alpha);
 	}
 
-	void* LiveTitleController_FadeOut_orig = nullptr;
-	void LiveTitleController_FadeOut_hook(void* _this, float duration, float currentTime) {
-		//printf("Title_FadeOut %.5f, %.5f\n", duration, currentTime);
-		if (g_showLiveTitleWindow) {
-			return reinterpret_cast<decltype(LiveTitleController_FadeOut_hook)*>
-				(LiveTitleController_FadeOut_orig)(_this, duration, currentTime);
-		}		
-		return;
-	}
+	//void* LiveTitleController_Setup_orig = nullptr;
+	//void LiveTitleController_Setup_hook(void* _this, LiveData* livedata, bool isAdjustForDialog = false){
+	//	//wprintf(L"%s", std::wstring(title->start_char).c_str());
+	//	printf("LiveTitle_Setup: [MusicID=%d, LiveMemberNumber=%d]\n", livedata->MusicId,livedata->LiveMemberNumber);
+	//	return reinterpret_cast<decltype(LiveTitleController_Setup_hook)*>
+	//		(LiveTitleController_Setup_orig)(_this, livedata,isAdjustForDialog);
+	//}
+	//void* LiveTitleController_FadeIn_orig = nullptr;
+	//void LiveTitleController_FadeIn_hook(void* _this, float duration, float currentTime) {
+	//	printf("Title_FadeIn %.5f, %.5f\n", duration, currentTime);
+	//	if (g_showLiveTitleWindow) {
+	//		return reinterpret_cast<decltype(LiveTitleController_FadeIn_hook)*>
+	//			(LiveTitleController_FadeIn_orig)(_this, duration, currentTime);
+	//	}
+	//	return;
+	//}
+
+	//void* LiveTitleController_FadeOut_orig = nullptr;
+	//void LiveTitleController_FadeOut_hook(void* _this, float duration, float currentTime) {
+	//	//printf("Title_FadeOut %.5f, %.5f\n", duration, currentTime);
+	//	if (g_showLiveTitleWindow) {
+	//		return reinterpret_cast<decltype(LiveTitleController_FadeOut_hook)*>
+	//			(LiveTitleController_FadeOut_orig)(_this, duration, currentTime);
+	//	}		
+	//	return;
+	//}
+
+	//void* LiveTitleController_AlterUpdate_orig = nullptr;
+	//void LiveTitleController_AlterUpdate_hook(Il2CppObject* _this) {
+	//	printf("Called LiveTitleController_AlterUpdate\n");
+	//	return;
+	//}
 
 	//void* Unity_Post_orig = nullptr;
 	//void* Unity_Post_hook(Il2CppString* Uri, void* stuff) {
@@ -445,6 +677,8 @@ using namespace std;
 	//	return reinterpret_cast<decltype(Unity_Post_hook)*>
 	//		(Unity_Post_orig)(Uri, stuff);
 	//}
+
+
 
 	void* RaceUI_SetRaceUIActive_orig = nullptr;
 	void RaceUI_SetRaceUIActive_hook(void* _this, bool active) {
@@ -565,21 +799,33 @@ using namespace std;
 		printf("CharacterBuildInfo_ctor called origcharaid=%d, origdressid=%d, mini=%d\n", charaId, dressId,_this->_miniMobParentCharaId);
 		
 		//if(_this.)
-		if (c_gachaCutinChara > -1) {
-			/*if (charaId == 9001)
-				charaId = 9002;*/
-			//else
+		if (g_homeAllDiamond) {
+			charaId = 1067;
+			dressId = 106701;
+			headId = 0;
+		}
+		else {
+			if (c_gachaCutinChara > -1) {
+				/*if (charaId == 9001)
+					charaId = 9002;*/
+					//else
+				_this->_charaId = c_gachaCutinChara;
 				charaId = c_gachaCutinChara;
-		}
-		if (c_gachaCutinDress > -1) {
-			/*if (dressId == 900101)
-				dressId = 900201;*/
-			//else
+			}
+			if (c_gachaCutinDress > -1) {
+				/*if (dressId == 900101)
+					dressId = 900201;*/
+					//else
+
+				_this->_dressId = c_gachaCutinDress;
 				dressId = c_gachaCutinDress;
+			}
+			if (c_gachaCutinHeadid > -1) {
+				_this->_headModelSubId = c_gachaCutinHeadid;
+				headId = c_gachaCutinHeadid;
+			}
 		}
-		if (c_gachaCutinHeadid > -1) {
-			headId = c_gachaCutinHeadid;
-		}
+		
 
 		printf("CharacterBuildInfo_ctor called ccharaid=%d, cdressid=%d\n", charaId, dressId);
 		//charaId = 1070;
@@ -795,19 +1041,30 @@ using namespace std;
 	void* RaceResultCutInHelper_LoadBodyMotion_hook(int characterId, MasterDressData* dress, int personalityType, int rank, int grade, int raceType) {
 		
 		printf("RaceResultCutInHelper_LoadBodyMotion: charaId=%d,dressid=%d,rank=%d,grade=%d\n",characterId, dress->Id,rank,grade);
-		if (c_raceResultCutinMotionChara > -1) {
-			characterId = c_raceResultCutinMotionChara;
-			dress->CharaId = c_raceResultCutinMotionChara;
+		if (g_winMotion564) {
+			characterId = 1007;
+			dress->CharaId = 1007;
+			dress->Id = 100701;
+			grade = 200;
+			//c_raceResultCutinMotionRank = rank;
 		}
-		if (c_raceResultCutinMotionDress > -1) {
-			dress->Id = c_raceResultCutinMotionDress;
+		else {
+			if (c_raceResultCutinMotionChara > -1) {
+				characterId = c_raceResultCutinMotionChara;
+				dress->CharaId = c_raceResultCutinMotionChara;
+			}
+			if (c_raceResultCutinMotionDress > -1) {
+				dress->Id = c_raceResultCutinMotionDress;
+			}
+			if (c_raceResultCutinMotionGrade > -1) {
+				grade = c_raceResultCutinMotionGrade;
+			}
+			if (c_raceResultCutinMotionRank > -1) {
+				rank = c_raceResultCutinMotionRank;
+			}
 		}
-		if (c_raceResultCutinMotionGrade > -1) {
-			grade = c_raceResultCutinMotionGrade;
-		}
-		if (c_raceResultCutinMotionRank > -1) {
-			rank = c_raceResultCutinMotionRank;
-		}
+		
+		
 		
 		//return nullptr;
 		return reinterpret_cast<decltype(RaceResultCutInHelper_LoadBodyMotion_hook)*>
@@ -818,19 +1075,30 @@ using namespace std;
 	void* RaceResultCutInHelper_LoadCameraMotion_hook(int characterId, MasterDressData* dress, int personalityType, int rank, int grade, int raceType) {
 		printf("RaceResultCutInHelper_LoadCameraMotion: charaId=%d,dressid=%d,rank=%d,grade=%d\n", characterId, dress->Id, rank, grade);
 		//return nullptr;
-		if (c_raceResultCutinMotionChara > -1) {
-			characterId = c_raceResultCutinMotionChara;
-			dress->CharaId = c_raceResultCutinMotionChara;
+		if (g_winMotion564) {
+			characterId = 1007;
+			dress->CharaId = 1007;
+			dress->Id = 100701;
+			grade = 200;
+			//c_raceResultCutinMotionRank = rank;
 		}
-		if (c_raceResultCutinMotionDress > -1) {
-			dress->Id = c_raceResultCutinMotionDress;
+		else {
+			if (c_raceResultCutinMotionChara > -1) {
+				characterId = c_raceResultCutinMotionChara;
+				dress->CharaId = c_raceResultCutinMotionChara;
+			}
+			if (c_raceResultCutinMotionDress > -1) {
+				dress->Id = c_raceResultCutinMotionDress;
+			}
+			if (c_raceResultCutinMotionGrade > -1) {
+				grade = c_raceResultCutinMotionGrade;
+			}
+			if (c_raceResultCutinMotionRank > -1) {
+				rank = c_raceResultCutinMotionRank;
+			}
 		}
-		if (c_raceResultCutinMotionGrade > -1) {
-			grade = c_raceResultCutinMotionGrade;
-		}
-		if (c_raceResultCutinMotionRank > -1) {
-			rank = c_raceResultCutinMotionRank;
-		}
+
+		
 		return reinterpret_cast<decltype(RaceResultCutInHelper_LoadCameraMotion_hook)*>
 			(RaceResultCutInHelper_LoadCameraMotion_orig)(characterId, dress, personalityType, rank, grade, raceType);
 	}
@@ -839,19 +1107,29 @@ using namespace std;
 	void* RaceResultCutInHelper_LoadEarMotion_hook(int characterId, MasterDressData* dress, int personalityType, int rank, int grade, int raceType) {
 		printf("RaceResultCutInHelper_LoadEarMotion: charaId=%d,dressid=%d,rank=%d,grade=%d\n", characterId, dress->Id, rank, grade);
 		//return nullptr;
-		if (c_raceResultCutinMotionChara > -1) {
-			characterId = c_raceResultCutinMotionChara;
-			dress->CharaId = c_raceResultCutinMotionChara;
+		if (g_winMotion564) {
+			characterId = 1007;
+			dress->CharaId = 1007;
+			dress->Id = 100701;
+			grade = 200;
+			//c_raceResultCutinMotionRank = rank;
 		}
-		if (c_raceResultCutinMotionDress > -1) {
-			dress->Id = c_raceResultCutinMotionDress;
+		else {
+			if (c_raceResultCutinMotionChara > -1) {
+				characterId = c_raceResultCutinMotionChara;
+				dress->CharaId = c_raceResultCutinMotionChara;
+			}
+			if (c_raceResultCutinMotionDress > -1) {
+				dress->Id = c_raceResultCutinMotionDress;
+			}
+			if (c_raceResultCutinMotionGrade > -1) {
+				grade = c_raceResultCutinMotionGrade;
+			}
+			if (c_raceResultCutinMotionRank > -1) {
+				rank = c_raceResultCutinMotionRank;
+			}
 		}
-		if (c_raceResultCutinMotionGrade > -1) {
-			grade = c_raceResultCutinMotionGrade;
-		}
-		if (c_raceResultCutinMotionRank > -1) {
-			rank = c_raceResultCutinMotionRank;
-		}
+		
 		return reinterpret_cast<decltype(RaceResultCutInHelper_LoadEarMotion_hook)*>
 			(RaceResultCutInHelper_LoadEarMotion_orig)(characterId, dress, personalityType, rank, grade, raceType);
 	}
@@ -860,19 +1138,29 @@ using namespace std;
 	void* RaceResultCutInHelper_LoadFacialMotion_hook(int characterId, MasterDressData* dress, int personalityType, int rank, int grade, int raceType) {
 		printf("RaceResultCutInHelper_LoadFacialMotion: charaId=%d,dressid=%d,rank=%d,grade=%d\n", characterId, dress->Id, rank, grade);
 		//return nullptr;
-		if (c_raceResultCutinMotionChara > -1) {
-			characterId = c_raceResultCutinMotionChara;
-			dress->CharaId = c_raceResultCutinMotionChara;
+		if (g_winMotion564) {
+			characterId = 1007;
+			dress->CharaId = 1007;
+			dress->Id = 100701;
+			grade = 200;
+			//c_raceResultCutinMotionRank = rank;
 		}
-		if (c_raceResultCutinMotionDress > -1) {
-			dress->Id = c_raceResultCutinMotionDress;
+		else {
+			if (c_raceResultCutinMotionChara > -1) {
+				characterId = c_raceResultCutinMotionChara;
+				dress->CharaId = c_raceResultCutinMotionChara;
+			}
+			if (c_raceResultCutinMotionDress > -1) {
+				dress->Id = c_raceResultCutinMotionDress;
+			}
+			if (c_raceResultCutinMotionGrade > -1) {
+				grade = c_raceResultCutinMotionGrade;
+			}
+			if (c_raceResultCutinMotionRank > -1) {
+				rank = c_raceResultCutinMotionRank;
+			}
 		}
-		if (c_raceResultCutinMotionGrade > -1) {
-			grade = c_raceResultCutinMotionGrade;
-		}
-		if (c_raceResultCutinMotionRank > -1) {
-			rank = c_raceResultCutinMotionRank;
-		}
+	
 		return reinterpret_cast<decltype(RaceResultCutInHelper_LoadFacialMotion_hook)*>
 			(RaceResultCutInHelper_LoadFacialMotion_orig)(characterId, dress, personalityType, rank, grade, raceType);
 	}
@@ -908,18 +1196,29 @@ using namespace std;
 	void* Gallop_Cutin_CutinCharacter_ctor_hook(void*_this, CutInCharacterCreateInfo* createInfo) {
 		printf("CutinCharacter type=%d charaid=%d dressid=%d, headid=%d, is어쩌구=%d, index=%d\n",
 			createInfo->_characterType,createInfo->_charaId,createInfo->_clothId,createInfo->_headId, createInfo->IsUseDressDataHeadModelSubId,createInfo->_charaIndex);
-		if (c_gachaCharaType > -1) {
-			createInfo->_characterType = c_gachaCharaType;
+		
+		if (g_homeAllDiamond) {
+			createInfo->_characterType = (TimelineKeyCharacterType)-1;
+			createInfo->_charaId = 1067;
+			createInfo->_clothId = 106701;
+			createInfo->_headId = 0;
 		}
-		if (c_gachaCutinChara > -1) {
-			createInfo->_charaId = c_gachaCutinChara;			
+		else {
+			if (c_gachaCharaType > -1) {
+				createInfo->_characterType = c_gachaCharaType;
+			}
+			if (c_gachaCutinChara > -1) {
+				createInfo->_charaId = c_gachaCutinChara;
+			}
+			if (c_gachaCutinDress > -1) {
+				createInfo->_clothId = c_gachaCutinDress;
+			}
+			if (c_gachaCutinHeadid > -1) {
+				createInfo->_headId = c_gachaCutinHeadid;
+			}
 		}
-		if (c_gachaCutinDress > -1) {
-			createInfo->_clothId = c_gachaCutinDress;
-		}
-		if (c_gachaCutinHeadid > -1) {
-			createInfo->_headId = c_gachaCutinHeadid;
-		}
+		
+		
 
 		/*if (createInfo->_charaId == 1001) {
 			createInfo->_charaId = 1026;
@@ -955,18 +1254,27 @@ using namespace std;
 	void* CutInHelper_OnCreateCharacterModel_hook(void* _this, CutInCharacterCreateInfo* info) {
 		printf("CutInHelper_OnCreateCharacterModel called origType=%d, origcharaid=%d\n",info->_characterType, info->_charaId );
 
-		if (c_gachaCharaType > -1) {
-			info->_characterType = c_gachaCharaType;
+		if (g_homeAllDiamond) {
+			info->_characterType = (TimelineKeyCharacterType)-1;
+			info->_charaId = 1067;
+			info->_clothId = 106701;
+			info->_headId = 0;
 		}
-		if (c_gachaCutinChara > -1) {
-			info->_charaId = c_gachaCutinChara;
+		else {
+			if (c_gachaCharaType > -1) {
+				info->_characterType = c_gachaCharaType;
+			}
+			if (c_gachaCutinChara > -1) {
+				info->_charaId = c_gachaCutinChara;
+			}
+			if (c_gachaCutinDress > -1) {
+				info->_clothId = c_gachaCutinDress;
+			}
+			if (c_gachaCutinHeadid > -1) {
+				info->_headId = c_gachaCutinHeadid;
+			}
 		}
-		if (c_gachaCutinDress > -1) {
-			info->_clothId = c_gachaCutinDress;
-		}
-		if (c_gachaCutinHeadid > -1) {
-			info->_headId = c_gachaCutinHeadid;
-		}
+		
 		printf("CutInHelper_OnCreateCharacterModel called cType=%d, ccharaid=%d\n",  info->_characterType,info->_charaId );
 		return reinterpret_cast<decltype(CutInHelper_OnCreateCharacterModel_hook)*>
 			(CutInHelper_OnCreateCharacterModel_orig)(_this, info);
@@ -1014,9 +1322,10 @@ using namespace std;
 	void* Live_Cutt_AlterUpdate_CameraLookAt_orig = nullptr;
 	void Live_Cutt_AlterUpdate_CameraLookAt_hook(void* _this, void* sheet, int currentFrame, Vector3_t* outLookAt) {
 		if (!c_stopLiveCam) {
-			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_CameraLookAt_hook)*>
+			reinterpret_cast<decltype(Live_Cutt_AlterUpdate_CameraLookAt_hook)*>
 				(Live_Cutt_AlterUpdate_CameraLookAt_orig)(_this, sheet, currentFrame, outLookAt);
 		}
+		liveCam_Lookat = *outLookAt;
 		//printf("AlterUpdate_CameraLookAt x=%.2f y=%.2f z=%.2f CurrentFrame=%d\n", outLookAt->x, outLookAt->y, outLookAt->z, currentFrame);
 		
 	}
@@ -1191,6 +1500,7 @@ using namespace std;
 
 	void* GameSystem_SoftwareReset_orig = nullptr;
 	void GameSystem_SoftwareReset_hook(void* _this) {
+
 		printf("Called GameSystem_SoftwareReset\nContinew?: (y, n)");
 		char ans = 0;
 		scanf_s("%c", &ans,1);
@@ -1204,8 +1514,10 @@ using namespace std;
 	void* GallopUtil_GotoTitleOnError_orig = nullptr;
 	void GallopUtil_GotoTitleOnError_hook(Il2CppString* text) {
 		wprintf(L"GallopUtil_GotoTitleOnError text=%s\n", wstring(text->start_char).c_str());
-		//return reinterpret_cast<decltype(GallopUtil_GotoTitleOnError_hook)*>
-		//	(GallopUtil_GotoTitleOnError_orig)(text);
+		if (g_gotoTitleOnError) {
+			return reinterpret_cast<decltype(GallopUtil_GotoTitleOnError_hook)*>
+				(GallopUtil_GotoTitleOnError_orig)(text);
+		}		
 	}
 
 	void* GetKeyDown_orig = nullptr;
@@ -1221,16 +1533,39 @@ using namespace std;
 		return ret;
 	}
 
+	
 	void* UnityEngine_GameObject_ctor_orig = nullptr;
 	void UnityEngine_GameObject_ctor_hook(void* _this, Il2CppString* name) {
-		printf("%p\n", _this);
-		auto ssql = std::wstring(name->start_char);
+		reinterpret_cast<decltype(UnityEngine_GameObject_ctor_hook)*>
+			(UnityEngine_GameObject_ctor_orig)(_this, name);
+		auto getobjectname = reinterpret_cast<Il2CppString * (*)(void*)>(il2cpp_symbols::get_method_pointer("UnityEngine.CoreModule.dll", "UnityEngine", "Object", "ToString", 0));
 
-		wprintf(L"new GameObject name=%s\n", ssql.c_str());
-		return reinterpret_cast<decltype(UnityEngine_GameObject_ctor_hook)*>
-			(UnityEngine_GameObject_ctor_orig)(_this,name);
+		wprintf(L"new GameObject name=%s\n", getobjectname(_this)->start_char);
+		
+		return;
 	}
 
+	void* UnityEngine_GameObject_ctor1_orig = nullptr;
+	void UnityEngine_GameObject_ctor1_hook(void* _this) {
+		reinterpret_cast<decltype(UnityEngine_GameObject_ctor1_hook)*>
+			(UnityEngine_GameObject_ctor1_orig)(_this);
+		auto getobjectname = reinterpret_cast<Il2CppString * (*)(void*)>(il2cpp_symbols::get_method_pointer("UnityEngine.CoreModule.dll", "UnityEngine", "Object", "ToString", 0));
+
+		wprintf(L"new GameObject name=%s\n", getobjectname(_this)->start_char);
+
+		return;
+	}
+
+	void* UnityEngine_GameObject_ctor2_orig = nullptr;
+	void UnityEngine_GameObject_ctor2_hook(void* _this, Il2CppString* name,void* components) {
+		reinterpret_cast<decltype(UnityEngine_GameObject_ctor2_hook)*>
+			(UnityEngine_GameObject_ctor2_orig)(_this, name,components);
+		auto getobjectname = reinterpret_cast<Il2CppString * (*)(void*)>(il2cpp_symbols::get_method_pointer("UnityEngine.CoreModule.dll", "UnityEngine", "Object", "ToString", 0));
+
+		wprintf(L"new GameObject name=%s\n", getobjectname(_this)->start_char);
+
+		return;
+	}
 	void* TapEffectController_ctor_orig = nullptr;
 	void TapEffectController_ctor_hook(void* _this) {
 		reinterpret_cast<decltype(TapEffectController_ctor_hook)*>
@@ -1342,6 +1677,7 @@ using namespace std;
 
 		if (uMsg == WM_SIZING)
 		{
+			//printf("WM_SIZING\n");
 			RECT* rect = reinterpret_cast<RECT*>(lParam);
 
 			float ratio = is_virt() ? 1.f / g_aspect_ratio : g_aspect_ratio;
@@ -1465,6 +1801,30 @@ using namespace std;
 		return reinterpret_cast<decltype(canvas_scaler_setres_hook)*>(canvas_scaler_setres_orig)(_this, res);
 	}
 
+	void* change_resize_ui_for_pc_orig;
+	void change_resize_ui_for_pc_hook(void* _this, int width, int height)
+	{
+		float scale = g_ui_scale;
+		Resolution_t r;
+		get_resolution_stub(&r);
+
+		if (g_force_landscape && (g_ui_scale > 0.5))
+			scale = g_ui_scale - 0.5;
+
+		
+
+		reinterpret_cast<decltype(change_resize_ui_for_pc_hook)*>(change_resize_ui_for_pc_orig)(_this, width, height);
+
+		const auto canvasScalerList = UIManager_GetCanvasScalerList(_this);
+		il2cpp_symbols::iterate_IEnumerable(canvasScalerList, [&](void* canvasScaler)
+			{
+				set_scale_factor(canvasScaler, max(1.0f, r.width / 1920.f) * scale);
+			});
+
+
+		
+	}
+
 	void (*text_assign_font)(void*);
 	int (*text_get_size)(void*);
 	void (*text_set_size)(void*, int);
@@ -1490,49 +1850,57 @@ using namespace std;
 	void* set_resolution_orig;
 	void set_resolution_hook(int width, int height, bool fullscreen)
 	{
-		Resolution_t r;
-		r = *get_resolution(&r);
-		
-		bool need_fullscreen = false;
+		if (g_auto_fullscreen) {
+			Resolution_t r;
+			r = *get_resolution(&r);
 
-		if (is_virt() && r.width / static_cast<double>(r.height) == (9.0 / 16.0))
-			need_fullscreen = true;
-		else if (!is_virt() && r.width / static_cast<double>(r.height) == (16.0 / 9.0))
-			need_fullscreen = true;
+			bool need_fullscreen = false;
 
-		
-		
-		if (need_fullscreen) {
-			if (g_useExclusiveFullScreen) {
-				if (g_exclusiveFullScreenWidth > 0 && g_exclusiveFullScreenHeight > 0) {
-					
-					setExclusiveFullScreen(g_exclusiveFullScreenWidth, g_exclusiveFullScreenHeight, FullScreenMode::ExclusiveFullScreen, g_max_fps);
-					Sleep(1000); 
+			if (is_virt() && r.width / static_cast<double>(r.height) == (9.0 / 16.0))
+				need_fullscreen = true;
+			else if (!is_virt() && r.width / static_cast<double>(r.height) == (16.0 / 9.0))
+				need_fullscreen = true;
+
+
+
+			if (need_fullscreen) {
+				if (g_useExclusiveFullScreen) {
+					if (g_exclusiveFullScreenWidth > 0 && g_exclusiveFullScreenHeight > 0) {
+
+						setExclusiveFullScreen(g_exclusiveFullScreenWidth, g_exclusiveFullScreenHeight, FullScreenMode::ExclusiveFullScreen, g_max_fps);
+						Sleep(1000);
+					}
+					else {
+
+						setExclusiveFullScreen(r.width, r.height, FullScreenMode::ExclusiveFullScreen, g_max_fps);
+						Sleep(1000);
+					}
+
 				}
 				else {
-					
-					setExclusiveFullScreen(r.width, r.height, FullScreenMode::ExclusiveFullScreen, g_max_fps);
-					Sleep(1000);
+
+					return reinterpret_cast<decltype(set_resolution_hook)*>(set_resolution_orig)(
+						r.width, r.height, true
+						);
+
+
 				}
-				
 			}
 			else {
-				
+
 				return reinterpret_cast<decltype(set_resolution_hook)*>(set_resolution_orig)(
-					r.width, r.height, true
-				);
-				
-				
+					width, height, false
+					);
+
+
 			}
 		}
 		else {
-			
 			return reinterpret_cast<decltype(set_resolution_hook)*>(set_resolution_orig)(
 				width, height, false
-			);
-			
-						
+				);
 		}
+		
 		
 		
 		//setExclusiveFullScreen(need_fullscreen ? 3840 : width, need_fullscreen ? 2160 : height, screenmode, currentRefreshRate);
@@ -1580,24 +1948,468 @@ using namespace std;
 	void* textutil_getmastertext_orig = nullptr;
 	Il2CppString* textutil_getmastertext_hook(int category, int index) {
 		auto ret_orig = reinterpret_cast<decltype(textutil_getmastertext_hook)*>(textutil_getmastertext_orig)(category, index);
-		string test = "키무라";
-		wprintf(L"GetMasterText category=%d, index=%d, str=%s\n", category, index, ret_orig->start_char);
-		//FILE* fLog;
-		//fLog = _wfopen(L"log.txt", L"w");
-		//if (fLog != NULL)
-		//{
-		//	fwrite(ret_orig->start_char, sizeof(WCHAR), wcslen(ret_orig->start_char), fLog);
-		//	fclose(fLog);
-		//}
-		return il2cpp_string_new(test.data());
+		if (isKimuraChallenge) {
+			string test = "키무라";
+			return il2cpp_string_new(test.data());
+			//Il2CppString* t = GetCharaNameByCharaId(1002);
+			//return il2cpp_string_new_utf16(t->start_char,t->length);
+			//return GetCharaNameByCharaId(1002);
+		}		
+		return ret_orig;
 	}
 
 	void* textutil_getstatictext_orig = nullptr;
 	Il2CppString* textutil_getstatictext_hook(int textid) {
 		auto ret_orig = reinterpret_cast<decltype(textutil_getstatictext_hook)*>(textutil_getstatictext_orig)(textid);
-		string test = "키무라2";
-		wprintf(L"GetStaticText Textid%d, str=%s\n", textid, ret_orig->start_char);
-		return il2cpp_string_new(test.data());
+		if (isKimuraChallenge) {
+			string test = "키무라";
+			return il2cpp_string_new(test.data());
+		}
+		
+		//wprintf(L"GetStaticText Textid%d, str=%s\n", textid, ret_orig->start_char);
+		return ret_orig;
+	}
+
+	void* cyan_localfile_pathresolver_getlocalpath_orig = nullptr;
+	Il2CppString* cyan_localfile_pathresolver_getlocalpath_hook(void* _this, int type, Il2CppString* hname) {
+		Il2CppString* ret = reinterpret_cast<decltype(cyan_localfile_pathresolver_getlocalpath_hook)*>(cyan_localfile_pathresolver_getlocalpath_orig)(_this, type, hname);
+
+		wprintf(L"GetLocalPath hname=%s, ret=%s\n", hname->start_char, ret->start_char);
+		return ret;
+	}
+
+	void* MasterEventMotionData_GetAnimCommand_orig = nullptr;
+	Il2CppObject* MasterEventMotionData_GetAnimCommand_hook(Il2CppObject* _this, Il2CppString* commandName) {
+		wstring orig = commandName->start_char;
+		Il2CppObject* ret = nullptr;
+		if (g_walkMotionAllUrara) {
+			if (orig.starts_with(L"homewalk")) {
+				if (orig.contains(L"_U")) {
+					orig = L"homewalk03_U";
+				}
+				else if (orig.contains(L"_D")) {
+					orig = L"homewalk03_D";
+				}
+				else {
+					orig = L"homewalk03";
+				}
+				printf("Replaced walk motion to urara\n");
+			}
+			
+			ret = reinterpret_cast<decltype(MasterEventMotionData_GetAnimCommand_hook)*>
+				(MasterEventMotionData_GetAnimCommand_orig)(_this, il2cpp_string_new_utf16(orig.data(), orig.length()));
+		}
+		else {
+			ret = reinterpret_cast<decltype(MasterEventMotionData_GetAnimCommand_hook)*>
+				(MasterEventMotionData_GetAnimCommand_orig)(_this, commandName);
+		}
+		return ret;
+	}
+
+	void* ModelController_GetCardId_orig = nullptr;
+	int ModelController_GetCardId_hook(Il2CppObject* _this) {
+		int ret = reinterpret_cast<decltype(ModelController_GetCardId_hook)*>
+			(ModelController_GetCardId_orig)(_this);
+		auto gen = std::bind(std::uniform_int_distribution<>(0, 1), std::default_random_engine());
+		if (g_winMotion564) {
+			bool b = gen();
+			int ret_edit = b ? 100701 : 100702;
+			printf("GetCardid ret=%d, replace=%d\n", ret, ret_edit);
+			ret = ret_edit;
+		}
+		else if(g_cardid > -1) {
+			ret = g_cardid;
+			printf("GetCardid ret=%d, replace=%d\n", ret, g_cardid);
+		}
+		return ret;
+	}
+
+	//void* CutInHelper_InstantiateTimeline_orig = nullptr;
+	//bool CutInHelper_InstantiateTimeline_hook(Il2CppObject* _instance, Il2CppString* path, void* parent, void* camera,
+	//	Il2CppString* preInstantiateKey, int requireType = 0, int cuttIndex = 0) {
+	//	wprintf(L"called InstantiateTimeline path=%s, key=%s, requireType=%d, cuttindex=%d\n", path->start_char, preInstantiateKey->start_char, requireType, cuttIndex);
+
+	//	return reinterpret_cast<decltype(CutInHelper_InstantiateTimeline_hook)*>
+	//		(CutInHelper_InstantiateTimeline_orig)(_instance, path, parent, camera, preInstantiateKey, requireType, cuttIndex);
+	//}
+
+
+	void* user_orig = nullptr;
+
+	void* user_hook(void* _this, CutInCharacterCreateInfo* info)
+	{
+		//printf("Something Pass User! \n");
+
+		/*
+		if (info->_characterType == 3 and info->_charaIndex == 0) {
+			info->_charaId = info->_charaId;
+		}
+		else {
+			info->_charaId = 1056;
+			info->_clothId = 105601;
+			info->_headId = 0;
+		}
+		*/
+
+		info->_charaId = 1019;
+		info->_clothId = 901019;
+		info->_headId = 0;
+
+
+		/*printf("Data is %p \n", info->_characterType);
+		printf("Data is %p \n", info->_charaIndex);
+		printf("Data is %p \n", info->_charaId);
+		printf("Data is %p \n", info->_clothId);
+		printf("Data is %p \n", info->_headId);
+		printf("Data is %p \n", info->_zekkenNo);
+		printf("Data is %p \n", info->OverrideClothCategory);
+		printf("Data is %p \n", info->IsUseDressDataHeadModelSubId);*/
+
+
+
+
+		void* ret = reinterpret_cast<decltype(user_hook)*>(user_orig)(_this, info);
+
+		//spring_hook(ret, 100);
+
+		//printf("User End! \n");
+
+		return ret;
+
+	}
+
+	void* chara_orig = nullptr;
+
+	void chara_hook(TimelineCharacter* _this, int currentFrame)
+	{
+		//printf("Something Pass Chara! \n");
+
+		////_this->_data->_characterKeys->_selectCharaId = -1;
+
+		//printf("Data is %p \n", currentFrame);
+
+		//printf("Data is %p \n", _this->_data);
+		//printf("Data is %p \n", _this->_data->_characterKeys);
+		//printf("Data is %p \n", _this->_data->_characterKeys->_selectCharaId);
+		//printf("Data is %p \n", _this->_data->_characterKeys->_selectClothId);
+		//printf("Data is %p \n", _this->_data->_characterKeys->_selectHeadId);
+
+		//printf("Data is %p \n", _this->_selectCharaId);
+		//printf("Data is %p \n", _this->_selectClothId);
+		//printf("Data is %p \n", _this->_selectHeadId);
+
+		//printf("_charaIndex %d\n", _this->_charaIndex);
+		//printf("CharacterPartsNum %d\n", _this->_data->CharacterPartsNum);
+		//printf("CharacterSpringCollisionNum %d\n", _this->_data->CharacterSpringCollisionNum);
+		//printf("CharacterWindNum %d\n", _this->_data->CharacterWindNum);
+		//printf("_characterCollisionNum %d\n", _this->_data->_characterCollisionNum);
+		//printf("_characterIKNum %d\n", _this->_data->_characterIKNum);
+
+		_this->_data->_characterKeys->_selectCharaId = c_gachaCutinChara;
+		_this->_data->_characterKeys->_selectClothId = c_gachaCutinDress;
+		_this->_data->_characterKeys->_selectHeadId = c_gachaCutinHeadid;
+		_this->_selectCharaId = c_gachaCutinChara;
+		_this->_selectClothId = c_gachaCutinDress;
+		_this->_selectHeadId = c_gachaCutinHeadid;
+		_this->_data->CharacterWindNum = 0;
+		
+
+		reinterpret_cast<decltype(chara_hook)*>(chara_orig)(_this, currentFrame);
+
+		//printf("Work Completed!\n");
+
+		return;
+
+	}
+
+	void* CutInCharacter_GenerateCutInModelControllerContext_orig = nullptr;
+	void* CutInCharacter_GenerateCutInModelControllerContext_hook(Il2CppObject* _this, int cardId, int charaId, int clothId, int headId, 
+		bool isUseDressDataHeadModelSubId, void* controller, bool isDirt, bool isWet, 
+		int overrideClothCategory = 0) {
+		printf("\n!====Called GenerateCutInModelControllerContext==\n");
+		printf("cardid=%d\n", cardId);
+		printf("charaId=%d\n", charaId);
+		printf("clothId=%d\n", clothId);
+		printf("headId=%d\n", headId);
+		printf("isUseDressDataHeadModelSubId=%d\n", isUseDressDataHeadModelSubId);
+		printf("isDirt=%d\n", isDirt);
+		printf("isWet=%d\n", isWet);
+		printf("overrideClothCategory=%d\n", overrideClothCategory);
+
+		charaId = c_gachaCutinChara;
+		clothId = c_gachaCutinDress;
+		headId = c_gachaCutinHeadid;
+		isUseDressDataHeadModelSubId = false;
+		
+
+		printf("\n====GenerateCutInModelControllerContext End==\n");
+		return reinterpret_cast<decltype(CutInCharacter_GenerateCutInModelControllerContext_hook)*>(CutInCharacter_GenerateCutInModelControllerContext_orig)
+			(_this,cardId,charaId,clothId,headId,isUseDressDataHeadModelSubId,controller,isDirt,isWet,overrideClothCategory);
+	}
+
+	void* CutInCharacter_CreateModel_orig = nullptr;
+	bool CutInCharacter_CreateModel_hook(Il2CppObject* _this, CutInCharacterCreateInfo* info, int controllerType) {
+		printf("\n!!$$%% ====Called CutInCharacter_CreateModel==\n");
+		printf(" info->_characterType=%d\n", info->_characterType);
+		printf("info->_charaId=%d\n", info->_charaId);
+		printf("info->_clothId=%d\n", info->_clothId);
+		printf("info->_headId=%d\n", info->_headId);
+		printf("info->isUseDressDataHeadModelSubId=%d\n", info->IsUseDressDataHeadModelSubId);
+		printf("controllerType=%d\n", controllerType);
+		printf("info->=%d\n",info->_isWet);
+		printf("info->overrideClothCategory=%d\n", info->OverrideClothCategory);
+		printf("\n!!====Called CutInCharacter_CreateModel end==\n");
+		info->OverrideClothCategory = 2;
+		//controllerType = 0;
+		return reinterpret_cast<decltype(CutInCharacter_CreateModel_hook)*>(CutInCharacter_CreateModel_orig)
+			(_this, info,controllerType);
+	}
+
+	void* RaceSkillCutInHelper_Owner_CreateAddChara_orig = nullptr;
+	int RaceSkillCutInHelper_Owner_CreateAddChara_hook(Il2CppObject* _this) {
+		printf("\n!====Called RaceSkillCutInHelper+Owner.get_CharaId==\n");
+		int ret = reinterpret_cast<decltype(RaceSkillCutInHelper_Owner_CreateAddChara_hook)*>(RaceSkillCutInHelper_Owner_CreateAddChara_orig)
+			(_this);
+		printf("ret=%d\,", ret);
+		//printf("cardid=%d\n", cardId);
+		//printf("charaId=%d\n", charaId);
+		//printf("dressId=%d\n", dressId);
+		//printf("headId=%d\n", headId);
+		//printf("isUseDressDataHeadModelSubId=%d\n", isUseDressDataHeadModelSubId);
+		//charaId = 1007;
+		//dressId = 100701;
+		//headId = 0;
+		return ret;
+	}
+
+	void* get_camera_pos_orig;
+	Vector3_t* get_camera_pos_hook(void* _this, Il2CppObject* timelineControl) {
+		auto pos = reinterpret_cast<decltype(get_camera_pos_hook)*>(get_camera_pos_orig)(_this, timelineControl);
+		liveCam_pos1.x = pos->x;
+		liveCam_pos1.y = pos->y;
+		liveCam_pos1.z = pos->z;
+		return pos;
+	}
+
+	void* get_camera_pos2_orig;  
+	Vector3_t* get_camera_pos2_hook(void* _this, Il2CppObject* timelineControl, void* type) {
+		auto pos = reinterpret_cast<decltype(get_camera_pos2_hook)*>(get_camera_pos2_orig)(_this, timelineControl, type);
+		liveCam_pos2 = *pos;
+		return pos;
+	}
+
+	void* ChangeScreenOrientation_orig = nullptr;
+
+	Il2CppObject* ChangeScreenOrientation_hook(ScreenOrientation targetOrientation, bool isForce) {
+		return reinterpret_cast<decltype(ChangeScreenOrientation_hook)*>(ChangeScreenOrientation_orig)(
+			g_force_landscape ? ScreenOrientation::Landscape : targetOrientation, isForce);
+	}
+
+	void* Screen_set_orientation_orig = nullptr;
+
+	void Screen_set_orientation_hook(ScreenOrientation orientation) {
+		if ((orientation == ScreenOrientation::Portrait ||
+			orientation == ScreenOrientation::PortraitUpsideDown) && g_force_landscape) {
+			orientation = ScreenOrientation::Landscape;
+		}
+		reinterpret_cast<decltype(Screen_set_orientation_hook)*>(Screen_set_orientation_orig)(
+			orientation);
+	}
+
+	void* EyeHighlightController_ctor_orig = nullptr;
+	void EyeHighlightController_ctor_hook(Il2CppObject* _this, EyeHighlightController_context* context) {
+		//context->KeyLocator->_highlightType = -1;
+		//context = nullptr;
+		
+		//Il2CppClass* klass = (Il2CppClass*)_this->klass;
+		//auto RemoveHighlightLocator = reinterpret_cast<void (*)(Il2CppObject * _Instance)>(il2cpp_class_get_method_from_name((Il2CppClass*)klass, "RemoveHighlightLocator", 0)->methodPointer);
+
+		//RemoveHighlightLocator(_this);
+		reinterpret_cast<decltype(EyeHighlightController_ctor_hook)*>(EyeHighlightController_ctor_orig)(
+			_this, context);
+		//context->KeyLocator->_highlightType = -1;
+		//context->KeyLocator->IsEnable = false;
+		//printf("_highlightType=%d, IsEnable=%d\n", context->KeyLocator->_highlightType, context->KeyLocator->IsEnable);
+		return;
+	}
+
+	void* EyeHighlightController_AfterUpdate_orig = nullptr;
+	void EyeHighlightController_AfterUpdate_hook(Il2CppObject* _this) {
+		printf("Called EyeHighlightController.AfterUpdate()\n");
+	}
+
+	void* EyeHighlightController_set_PupliScale_orig = nullptr;
+	void EyeHighlightController_set_PupliScale_hook(Il2CppObject* _this, float value) {
+		printf("Called EyeHighlightController.set_PupliScale value=%.5f\n",value);
+		reinterpret_cast<decltype(EyeHighlightController_set_PupliScale_hook)*>(EyeHighlightController_set_PupliScale_orig)(
+			_this, value);
+	}
+
+	void* LiveModelController_UpdateEyeReflectionController_orig = nullptr;
+	void LiveModelController_UpdateEyeReflectionController_hook(LiveModelController_EyeReflectionContext* context) {
+		printf("Called UpdateEyeReflectionController \n");
+		printf("CullingMask=%d\n", context->CullingMask);
+		printf("FarClipPlane=%.3f\n", context->FarClipPlane);
+		printf("FieldOfView=%.3f\n", context->FieldOfView);
+		printf("IsEnabled=%d\n", context->IsEnabled);
+		printf("MaskTexture=%p\n", context->MaskTexture);
+		printf("CullingMask=%.3f\n", context->NearClipPlane);
+		printf("Power=%.3f\n", context->Power);
+		printf("Roll=%.3f\n", context->Roll);
+		//context->IsEnabled = true;
+		//context.
+		//context->Power = 1.0;
+		return reinterpret_cast<decltype(LiveModelController_UpdateEyeReflectionController_hook)*>
+			(LiveModelController_UpdateEyeReflectionController_orig)( context);
+	}
+
+	void* EyeReflectionController_set_ReflectionPower_orig = nullptr;
+	void EyeReflectionController_set_ReflectionPower_hook(Il2CppObject* _this, float value) {
+		printf("Called EyeReflectionController.set_ReflectionPower value=%.5f\n", value);
+		return reinterpret_cast<decltype(EyeReflectionController_set_ReflectionPower_hook)*>(EyeReflectionController_set_ReflectionPower_orig)(
+			_this, value);
+	}
+
+	void* EyeReflectionController_ctor_orig = nullptr;
+	void EyeReflectionController_ctor_hook(Il2CppObject* _this, void* context) {
+		printf("Called EyeReflectionController_ctor \n");
+		
+		reinterpret_cast<decltype(EyeReflectionController_ctor_hook)*>(EyeReflectionController_ctor_orig)(
+			_this,context);
+		EyeReflectionController_set_ReflectionPower_hook(_this, 0.0);
+		return;
+	}
+
+	void* ModelController_ctor_orig = nullptr;
+	void ModelController_ctor_hook(Il2CppObject* _Instance) {
+		printf("Called ModelController_ctor\n");
+		reinterpret_cast<decltype(ModelController_ctor_hook)*>(ModelController_ctor_orig)(
+			_Instance);
+		auto AddEyeReflection = reinterpret_cast<EyeReflectionController* (*)(Il2CppObject * _Instance)>(il2cpp_class_get_method_from_name(_Instance->klass, "AddEyeReflectionComponent", 0)->methodPointer);
+		EyeReflectionController* eye = AddEyeReflection(_Instance);
+		eye->_isEyeReflection = true;
+		return;
+	}
+
+	//Graphics
+
+	void* set_vsync_count_orig = nullptr;
+	void set_vsync_count_hook(int value) {
+		printf("setVsyncCount: %d -> %d\n", value, g_vsync_count);
+		return reinterpret_cast<decltype(set_vsync_count_hook)*>(set_vsync_count_orig)(g_vsync_count == -1 ? value : g_vsync_count);
+	}
+
+	void* set_antialiasing_orig = nullptr;
+	void set_antialiasing_hook(int value) {
+		printf("setAntialiasing: %d -> %d\n", value, g_antialiasing);
+		set_vsync_count_hook(1);
+		return reinterpret_cast<decltype(set_antialiasing_hook)*>(set_antialiasing_orig)(!g_highquality ? value : g_antialiasing);
+	}
+
+	void* graphics_quality_orig = nullptr;
+	void graphics_quality_hook(Il2CppObject* thisObj, int quality, bool force) {
+		printf("setGraphicsQuality: %d -> %d\n", quality, g_graphics_quality);
+		return reinterpret_cast<decltype(graphics_quality_hook)*>(graphics_quality_orig)(thisObj,
+			g_graphics_quality == -1 ? quality : g_graphics_quality,
+			true);
+	}
+
+	void* set_RenderTextureAntiAliasing_orig;
+	void set_RenderTextureAntiAliasing_hook(void* _this, int value) {
+		return reinterpret_cast<decltype(set_RenderTextureAntiAliasing_hook)*>(set_RenderTextureAntiAliasing_orig)(_this,
+			!g_highquality ? value : g_antialiasing);
+	}
+
+	void* Get3DAntiAliasingLevel_orig;
+	int Get3DAntiAliasingLevel_hook(void* _this, bool allowMSAA) {
+		if (g_highquality) allowMSAA = true;
+		auto data = reinterpret_cast<decltype(Get3DAntiAliasingLevel_hook)*>(Get3DAntiAliasingLevel_orig)(_this, allowMSAA);
+		printf("Get3DAntiAliasingLevel: %d %d\n", allowMSAA, data);
+		return data;
+	}
+
+	void* ProcessMouseEvent_orig;
+	void ProcessMouseEvent_hook(void* _this, int id) {
+		if(!imgui_settingwnd_open)
+			return reinterpret_cast<decltype(ProcessMouseEvent_hook)*>(ProcessMouseEvent_orig)(_this, id);;
+	}
+
+	//void* BootSystem_Awake_orig = nullptr;
+
+	//void BootSystem_Awake_hook(Il2CppObject* _this) {
+	//	printf("Boot_Awake runned\n");
+	//	if (g_force_landscape) {
+	//		ChangeScreenOrientation_hook(ScreenOrientation::Landscape, true);
+	//		auto enumerator1 = reinterpret_cast<Il2CppObject * (*)()>(il2cpp_symbols::get_method_pointer(
+	//			"umamusume.dll",
+	//			"Gallop",
+	//			"Screen", "ChangeScreenOrientationLandscapeAsync", -1))();
+	//		auto move_next1 = reinterpret_cast<void* (*)(
+	//			Il2CppObject * _this)>(il2cpp_class_get_method_from_name(enumerator1->klass,
+	//				"MoveNext",
+	//				0)->methodPointer);
+	//		move_next1(enumerator1);
+	//		//printf("Boot_Awake runned\n");
+	//		//landscape();
+	//	}
+	//	
+	//	reinterpret_cast<decltype(BootSystem_Awake_hook)*>(BootSystem_Awake_orig)(_this);
+	//}
+
+	void* Gallop_SceneManager_LoadScene_orig = nullptr;
+	void* Gallop_SceneManager_LoadScene_hook(void* _this, int sceneId) {
+		printf("LoadScene id=%d\n",sceneId);
+		//
+		if (g_force_landscape && (sceneId == 1) ) {
+			
+			auto enumerator1 = reinterpret_cast<Il2CppObject * (*)()>(il2cpp_symbols::get_method_pointer(
+				"umamusume.dll",
+				"Gallop",
+				"Screen", "ChangeScreenOrientationLandscapeAsync", -1))();
+			auto move_next1 = reinterpret_cast<void* (*)(
+				Il2CppObject * _this)>(il2cpp_class_get_method_from_name(enumerator1->klass,
+					"MoveNext",
+					0)->methodPointer);
+			move_next1(enumerator1);
+
+			Screen_set_orientation_hook(ScreenOrientation::Landscape);
+			ChangeScreenOrientation_hook(ScreenOrientation::Landscape, true);
+			//printf("Boot_Awake runned\n");
+			//landscape();
+		}
+		return reinterpret_cast<decltype(Gallop_SceneManager_LoadScene_hook)*>(Gallop_SceneManager_LoadScene_orig)(_this, sceneId);
+	}
+	
+	void* ResourcePath_GetRaceResultCuttPath_orig = nullptr;
+	Il2CppString* ResourcePath_GetRaceResultCuttPath_hook(int charaId, int subId, int cardId, int rank, int grade, int raceType) {
+		if (c_raceResultCutinMotionChara > -1) {
+			charaId = c_raceResultCutinMotionChara;
+			// dress->CharaId = c_raceResultCutinMotionChara;
+		}
+		if (g_cardid > -1) {
+			cardId = g_cardid;
+		}
+		if (c_raceResultCutinMotionGrade > -1) {
+			grade = c_raceResultCutinMotionGrade;
+		}
+		if (c_raceResultCutinMotionRank > -1) {
+			rank = c_raceResultCutinMotionRank;
+		}
+		printf("GetRaceResultCuttPath charaid=%d, subid=%d, cardid=%d,rank=%d, grade=%d, raceType=%d\n");
+		return reinterpret_cast<decltype(ResourcePath_GetRaceResultCuttPath_hook)*>(ResourcePath_GetRaceResultCuttPath_orig)(charaId,subId,cardId,rank,grade,raceType);
+	}
+
+	void* RaceUIFinishOrderFlash_Play_orig = nullptr;
+	void RaceUIFinishOrderFlash_Play_hook(Il2CppObject* _instance, int finishOrder) {
+		
+		if (showFinishOrderFlash) {
+			printf("RaceUIFinishOrderFlash_Play finishOrder=%d\n", finishOrder);
+			return reinterpret_cast<decltype(RaceUIFinishOrderFlash_Play_hook)*>(RaceUIFinishOrderFlash_Play_orig)(_instance, finishOrder);
+		}
+		else {
+			printf("RaceUIFinishOrderFlash_Play ignored\n");
+		}
+			
 	}
 
 	/*void* unity_font_ctor_orig = nullptr;
@@ -1634,7 +2446,7 @@ using namespace std;
 
 		printf("Trying to patch GameAssembly.dll...\n");
 
-		auto il2cpp_module = GetModuleHandle("GameAssembly.dll");
+		auto il2cpp_module = GetModuleHandle(L"GameAssembly.dll");
 
 		// load il2cpp exported functions
 		il2cpp_symbols::init(il2cpp_module);
@@ -1680,7 +2492,7 @@ using namespace std;
 
 		auto query_ctor_addr = il2cpp_symbols::get_method_pointer(
 			"LibNative.Runtime.dll", "LibNative.Sqlite3", 
-			"Query", ".ctor", 2
+			"Query", "_Setup", 2
 		);
 
 		sql_query = reinterpret_cast<void(*)(Connection*,Il2CppString*)>(query_ctor_addr);
@@ -1701,10 +2513,11 @@ using namespace std;
 			"Query", "Dispose", 0
 		);
 
-		auto set_fps_addr = il2cpp_symbols::get_method_pointer(
+		auto set_fps_addr =il2cpp_resolve_icall("UnityEngine.Application::set_targetFrameRate(System.Int32)");
+			/* il2cpp_symbols::get_method_pointer(
 			"UnityEngine.CoreModule.dll", "UnityEngine",
 			"Application", "set_targetFrameRate", 1
-		);
+		);*/
 
 		auto wndproc_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop",
@@ -1769,6 +2582,11 @@ using namespace std;
 			"UnityEngine.UI.dll", "UnityEngine.UI",
 			"CanvasScaler", "set_referenceResolution", 1
 		);
+
+		UIManager_GetCanvasScalerList = reinterpret_cast<decltype(UIManager_GetCanvasScalerList)>(il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"UIManager", "GetCanvasScalerList", -1
+		));
 
 		set_scale_factor = reinterpret_cast<void(*)(void*,float)>(
 			il2cpp_symbols::get_method_pointer(
@@ -1876,7 +2694,7 @@ using namespace std;
 				"GachaBGController", "SetGateDoorRarity", 1
 			));
 
-		auto LiveTitleController_Setup_addr = reinterpret_cast<void(*)(void*, LiveData*,bool)>(
+	/*	auto LiveTitleController_Setup_addr = reinterpret_cast<void(*)(void*, LiveData*,bool)>(
 			il2cpp_symbols::get_method_pointer(
 				"umamusume.dll", "Gallop.Live",
 				"LiveTitleController", "Setup", 2
@@ -1885,13 +2703,24 @@ using namespace std;
 			il2cpp_symbols::get_method_pointer(
 				"umamusume.dll", "Gallop.Live",
 				"LiveTitleController", "FadeIn", 2
-			));
+			)
+			);
 
 		auto LiveTitleController_FadeOut_addr = reinterpret_cast<void(*)(void*, float, float)>(
 			il2cpp_symbols::get_method_pointer(
 				"umamusume.dll", "Gallop.Live",
 				"LiveTitleController", "FadeOut", 2
 			));
+
+		auto LiveTitleController_AlterUpdate_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live",
+			"LiveTitleController", "AlterUpdate", 0
+		);*/
+
+		auto FadeGui_SetAlpha_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live",
+			"FadeGui", "SetAlpha", 1
+		);
 
 	/*	auto Unity_Post_addr = reinterpret_cast<void(*)(Il2CppString*,void*)>(
 			il2cpp_symbols::get_method_pointer(
@@ -2210,6 +3039,7 @@ using namespace std;
 			"GameSystem", "SoftwareReset", 0
 		);
 
+
 		auto GallopUtil_GotoTitleOnError_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop",
 			"GallopUtil", "GotoTitleOnError", 1
@@ -2222,6 +3052,20 @@ using namespace std;
 			)
 		);
 
+		auto UnityEngine_GameObject_ctor1_addr = reinterpret_cast<void(*)(void*)>(
+			il2cpp_symbols::get_method_pointer(
+				"UnityEngine.CoreModule.dll", "UnityEngine",
+				"GameObject", ".ctor", 0
+			)
+		);
+
+		auto UnityEngine_GameObject_ctor2_addr = reinterpret_cast<void(*)(void*, Il2CppString*, void*)>(
+			il2cpp_symbols::get_method_pointer(
+				"UnityEngine.CoreModule.dll", "UnityEngine",
+				"GameObject", ".ctor", 2
+			)
+		);
+
 		gameObject_setActive = reinterpret_cast<void(*)(void*, bool)>(
 			il2cpp_symbols::get_method_pointer(
 				"UnityEngine.CoreModule.dll", "UnityEngine",
@@ -2229,10 +3073,17 @@ using namespace std;
 				)
 			);
 
-		GetKeyDown = reinterpret_cast<bool(*)(int)> (
+		GetKeyDown = reinterpret_cast<bool(*)(KeyCode)> (
 			il2cpp_symbols::get_method_pointer(
 				"UnityEngine.InputLegacyModule.dll", "UnityEngine",
 				"Input", "GetKeyDown", 1
+			)
+		);
+
+		GetKey = reinterpret_cast<bool(*)(KeyCode)> (
+			il2cpp_symbols::get_method_pointer(
+				"UnityEngine.InputLegacyModule.dll", "UnityEngine",
+				"Input", "GetKey", 1
 			)
 		);
 
@@ -2258,13 +3109,262 @@ using namespace std;
 			Il2CppObject*, int, bool)>(il2cpp_symbols::get_method_pointer(
 				"umamusume.dll",
 				"Gallop",
-				"GraphicSettings", "ApplyGraphicsQuality", 2));
+				"GraphicSettings", "ApplyGraphicsQuality", 2)
+				);
 		
-		/*auto unityengine_get_persistentDataPath_addr = reinterpret_cast<Il2CppString*(*)()>(
+		auto unityengine_get_persistentDataPath_addr = reinterpret_cast<Il2CppString*(*)()>(
 			il2cpp_symbols::get_method_pointer(
 				"UnityEngine.CoreModule.dll", "UnityEngine",
 				"Application", "get_persistentDataPath", 0
-			));*/
+			));
+
+		LoadScene = reinterpret_cast<void(*)(Il2CppString*, LoadSceneParameters*)>(
+			il2cpp_symbols::get_method_pointer(
+				"UnityEngine.CoreModule.dll", "UnityEngine.SceneManagement",
+				"SceneManager", "LoadScene", 2
+			));
+
+		set_TimeScale = reinterpret_cast<void(*)(float)>(
+			il2cpp_symbols::get_method_pointer(
+				"UnityEngine.CoreModule.dll", "UnityEngine",
+				"Time", "set_timeScale", 1
+			));
+
+		get_TimeScale = reinterpret_cast<float(*)()>(
+			il2cpp_symbols::get_method_pointer(
+				"UnityEngine.CoreModule.dll", "UnityEngine",
+				"Time", "get_timeScale", 0
+			));
+
+		auto MasterEventMotionData_GetAnimCommand_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"MasterEventMotionData", "GetAnimCommand", 1
+		);
+
+		auto ModelController_GetCardId_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"ModelController", "GetCardId", 0
+		);
+
+		GetCharaNameByCharaId = reinterpret_cast<Il2CppString * (*)(int)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"MasterDataUtil", "GetCharaNameByCharaId", 1
+			)
+		);
+
+		auto s2c_addr = il2cpp_symbols::get_method_pointer(
+			"mscorlib.dll", "System",
+			"String", "ToCharArray", 0
+		);
+
+		MH_CreateHook((LPVOID)s2c_addr, s2c_hook, &s2c_orig);
+		MH_EnableHook((LPVOID)s2c_addr);
+
+
+		/*auto CutInHelper_InstantiateTimeline_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"CutInHelper", "InstantiateTimeline", 6
+		);
+
+		printf("onplayer_addr at %p\n", CutInHelper_InstantiateTimeline_addr);
+
+
+		MH_CreateHook((LPVOID)CutInHelper_InstantiateTimeline_addr, CutInHelper_InstantiateTimeline_hook, &CutInHelper_InstantiateTimeline_orig);
+		MH_EnableHook((LPVOID)CutInHelper_InstantiateTimeline_addr);*/
+
+		/*auto user_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"CutInOwner", "GetUserModel", 1, 3646
+		);
+
+		printf("user_addr at %p\n", user_addr);
+
+		MH_CreateHook((LPVOID)user_addr, user_hook, &user_orig);
+		MH_EnableHook((LPVOID)user_addr);*/
+
+		auto chara_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.CutIn.Cutt",
+			"TimelineCharacter", "CreateCharacterModel", 1
+		);
+
+		//printf("chara_addr at %p\n", chara_addr);
+
+		//MH_CreateHook((LPVOID)chara_addr, chara_hook, &chara_orig);
+		//MH_EnableHook((LPVOID)chara_addr);
+
+		auto CutInCharacter_GenerateCutInModelControllerContext_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.CutIn",
+			"CutInCharacter", "GenerateCutInModelControllerContext", 9 
+		); 
+
+		//MH_CreateHook((LPVOID)CutInCharacter_GenerateCutInModelControllerContext_addr, CutInCharacter_GenerateCutInModelControllerContext_hook, &CutInCharacter_GenerateCutInModelControllerContext_orig);
+		//MH_EnableHook((LPVOID)CutInCharacter_GenerateCutInModelControllerContext_addr);
+
+		auto CutInCharacter_CreateModel_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.CutIn",
+			"CutInCharacter", "CreateModel", 2
+		);
+		//MH_CreateHook((LPVOID)CutInCharacter_CreateModel_addr, CutInCharacter_CreateModel_hook, &CutInCharacter_CreateModel_orig);
+		//MH_EnableHook((LPVOID)CutInCharacter_CreateModel_addr);
+
+		auto RaceSkillCutInHelper_class = il2cpp_symbols::get_class("umamusume.dll", "Gallop", "RaceSkillCutInHelper");
+		auto RaceSkillCutInHelper_Owner_class = il2cpp_symbols::find_nested_class_from_name(RaceSkillCutInHelper_class, "Owner");
+		auto RaceSkillCutInHelper_Owner_CreateAddChara_addr = reinterpret_cast<int * (*)()>(
+			il2cpp_class_get_method_from_name(
+			RaceSkillCutInHelper_Owner_class,
+			"set_CharaId", 1
+				)->methodPointer
+			);
+
+
+		auto get_camera_pos_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineKeyCameraPositionData", "GetValue", 1
+		);
+
+		auto get_camera_pos2_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineKeyCameraPositionData", "GetValue", 2
+		);
+
+		auto alterupdate_camera_lookat_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "AlterUpdate_CameraLookAt", 3
+		);
+
+		auto ChangeScreenOrientation_addr = reinterpret_cast<void (*)(
+			ScreenOrientation, bool)>(il2cpp_symbols::get_method_pointer(
+				"umamusume.dll",
+				"Gallop",
+				"Screen", "ChangeScreenOrientation", 2));
+
+		auto Screen_set_orientation_addr = reinterpret_cast<void (*)(
+			ScreenOrientation)>(il2cpp_symbols::get_method_pointer(
+				"UnityEngine.CoreModule.dll",
+				"UnityEngine",
+				"Screen", "set_orientation", 1));
+
+		auto EyeHighlightController_ctor_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll",
+			"Gallop.Model.Component",
+			"EyeHighlightController", ".ctor", 1);
+
+		/*MH_CreateHook((LPVOID)EyeHighlightController_ctor_addr, EyeHighlightController_ctor_hook, &EyeHighlightController_ctor_orig);
+		MH_EnableHook((LPVOID)EyeHighlightController_ctor_addr);*/
+
+
+		auto EyeHighlightController_AfterUpdate_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll",
+			"Gallop.Model.Component",
+			"EyeHighlightController", "AfterUpdate", 0);
+
+		//MH_CreateHook((LPVOID)EyeHighlightController_AfterUpdate_addr, EyeHighlightController_AfterUpdate_hook, &EyeHighlightController_AfterUpdate_orig);
+		//MH_EnableHook((LPVOID)EyeHighlightController_AfterUpdate_addr);
+
+		auto EyeHighlightController_set_PupliScale_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll",
+			"Gallop.Model.Component",
+			"EyeHighlightController", "set_PupliScale", 1);
+		/*MH_CreateHook((LPVOID)EyeHighlightController_set_PupliScale_addr, EyeHighlightController_set_PupliScale_hook, &EyeHighlightController_set_PupliScale_orig);
+		MH_EnableHook((LPVOID)EyeHighlightController_set_PupliScale_addr);*/
+
+		auto EyeReflectionController_set_ReflectionPower_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll",
+			"Gallop.Model.Component",
+			"EyeReflectionController", "set_ReflectionPower", 1);
+
+		/*MH_CreateHook((LPVOID)EyeReflectionController_set_ReflectionPower_addr,
+			EyeReflectionController_set_ReflectionPower_hook, &EyeReflectionController_set_ReflectionPower_orig);
+		MH_EnableHook((LPVOID)EyeReflectionController_set_ReflectionPower_addr);*/
+
+		auto EyeReflectionController_ctor_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll",
+			"Gallop.Model.Component",
+			"EyeReflectionController", ".ctor", 1);
+
+		MH_CreateHook((LPVOID)EyeReflectionController_ctor_addr,
+			EyeReflectionController_ctor_hook, &EyeReflectionController_ctor_orig);
+		MH_EnableHook((LPVOID)EyeReflectionController_ctor_addr);
+
+
+		auto ModelController_ctor_addr =  il2cpp_symbols::get_method_pointer(
+			"umamusume.dll",
+			"Gallop",
+			"ModelController", ".ctor", 0);
+
+		MH_CreateHook((LPVOID)ModelController_ctor_addr,
+			ModelController_ctor_hook, &ModelController_ctor_orig);
+		MH_EnableHook((LPVOID)ModelController_ctor_addr);
+
+		auto set_antialiasing_addr = il2cpp_resolve_icall("UnityEngine.QualitySettings::set_antiAliasing(System.Int32)");
+		/*il2cpp_symbols::get_method_pointer(
+			"UnityEngine.CoreModule.dll", "UnityEngine",
+			"QualitySettings", "set_antiAliasing", 1
+		);*/
+
+		auto graphics_quality_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"GraphicSettings", "ApplyGraphicsQuality", 2);
+
+		auto set_vsync_count_addr = il2cpp_symbols::get_method_pointer(
+			"UnityEngine.CoreModule.dll", "UnityEngine",
+			"QualitySettings", "set_vSyncCount", 1
+		);
+		auto set_RenderTextureAntiAliasing_addr = il2cpp_symbols::get_method_pointer(
+			"UnityEngine.CoreModule.dll", "UnityEngine",
+			"RenderTexture", "set_antiAliasing", 1
+		);
+
+		auto Get3DAntiAliasingLevel_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"GraphicSettings", "Get3DAntiAliasingLevel", 1
+		);
+
+		auto ProcessMouseEvent_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "UnityEngine.EventSystems",
+			"GallopStandaloneInputModule", "ProcessMouseEvent", 1
+		);
+
+		auto Gallop_SceneManager_LoadScene_addr = reinterpret_cast<void (*)(int)>(il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"SceneManager", "LoadScene", 1
+		));
+
+		auto ResourcePath_GetRaceResultCuttPath_addr = reinterpret_cast<Il2CppString* (*)(int,int,int,int,int,int)>(il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"ResourcePath", "GetRaceResultCuttPath", 6
+		));
+
+		MH_CreateHook((LPVOID)ResourcePath_GetRaceResultCuttPath_addr,
+			ResourcePath_GetRaceResultCuttPath_hook, &ResourcePath_GetRaceResultCuttPath_orig);
+		MH_EnableHook((LPVOID)ResourcePath_GetRaceResultCuttPath_addr);
+
+		auto RaceUIFinishOrderFlash_Play_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"RaceUIFinishOrderFlash", "Play", 1
+		);
+		
+		MH_CreateHook((LPVOID)RaceUIFinishOrderFlash_Play_addr,
+			RaceUIFinishOrderFlash_Play_hook, &RaceUIFinishOrderFlash_Play_orig);
+		MH_EnableHook((LPVOID)RaceUIFinishOrderFlash_Play_addr);
+
+		/*auto LiveModelController_UpdateEyeReflectionController_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll",
+			"Gallop",
+			"LiveModelController", "UpdateEyeReflectionController", 1);
+
+		MH_CreateHook((LPVOID)LiveModelController_UpdateEyeReflectionController_addr, 
+			LiveModelController_UpdateEyeReflectionController_hook, &LiveModelController_UpdateEyeReflectionController_orig);
+		MH_EnableHook((LPVOID)LiveModelController_UpdateEyeReflectionController_addr);*/
+
+		//MH_CreateHook((LPVOID)RaceSkillCutInHelper_Owner_CreateAddChara_addr, RaceSkillCutInHelper_Owner_CreateAddChara_hook, &RaceSkillCutInHelper_Owner_CreateAddChara_orig);
+		//MH_EnableHook((LPVOID)RaceSkillCutInHelper_Owner_CreateAddChara_addr);
+		
+		/*auto cyan_localfile_pathresolver_getlocalpath_addr = il2cpp_symbols::get_method_pointer(
+			"_Cyan.dll", "Cyan.LocalFile",
+			"PathResolver", "GetLocalPath", 2
+		);*/
 
 		/*auto unity_font_ctor_addr = reinterpret_cast<void *(*)(void* , Il2CppString*)>(
 			il2cpp_symbols::get_method_pointer(
@@ -2311,12 +3411,18 @@ using namespace std;
 			"Race", "GetRankNumSmallPath", 1
 		);*/
 
-		/*auto GachaBGController_GateDoor_SetRarity_addr =
-			il2cpp_symbols::get_method_pointer(
-				"umamusume.dll", "Gallop",
-				"GachaBGController+GateDoor","SetRarity",1
-			);*/
 
+	/*	auto GachaBGController_class = il2cpp_symbols::get_class("umamusume.dll", "Gallop", "GachaBGController");
+		auto GachaBGController_GateDoor_class = il2cpp_symbols::find_nested_class_from_name(GachaBGController_class, "GateDoor");
+		auto GachaBGController_GateDoor_SetRarity_addr =
+			il2cpp_class_get_method_from_name(
+				GachaBGController_GateDoor_class,
+				"SetRarity",1
+			)->methodPointer;
+		MH_CreateHook((LPVOID)GachaBGController_GateDoor_SetRarity_addr, GachaBGController_GateDoor_SetRarity_hook, &GachaBGController_GateDoor_SetRarity_orig);
+		MH_EnableHook((LPVOID)GachaBGController_GateDoor_SetRarity_addr);*/
+
+		//printf("\033[33mGachaBGController_GateDoor_class %p\033[0m\n", GachaBGController_GateDoor_SetRarity_addr);
 #pragma endregion
 
 		// hook UnityEngine.TextGenerator::PopulateWithErrors to modify text
@@ -2333,11 +3439,13 @@ using namespace std;
 		//ADD_HOOK(live_Cutt_LiveTimelineControl_GetCameraPos, "Gallop.Live.Cutt.LiveTimelineControl.GetCameraPos(int) at %p\n");
 		//ADD_HOOK(live_Cutt_LiveTimelineControl_set_liveStageCenterPos, "Gallop.Live.Cutt.LiveTimelineControl.set_liveStageCenterPos(Vector3) at %p\n");
 		ADD_HOOK(AssetBundleHelper_GetResourceVer, "Gallop.AssetBundleHelper.GetResourceVer() at %p\n");
-		ADD_HOOK(GachaBGController_OverrideRarity, "Gallop.GachaBGController.OverrideRarity(int, int(enum)) at %p\n");
-		ADD_HOOK(GachaBGController_SetGateDoorRarity, "Gallop.GachaBGController.SetRarity(int) at %p\n");
-		ADD_HOOK(LiveTitleController_Setup, "Gallop.Live.LiveTitleController.Setup at %p\n");
+		//ADD_HOOK(GachaBGController_OverrideRarity, "Gallop.GachaBGController.OverrideRarity(int, int(enum)) at %p\n");
+		//ADD_HOOK(GachaBGController_SetGateDoorRarity, "Gallop.GachaBGController.SetRarity(int) at %p\n");
+		/*ADD_HOOK(LiveTitleController_Setup, "Gallop.Live.LiveTitleController.Setup at %p\n");
 		ADD_HOOK(LiveTitleController_FadeIn, "Gallop.Live.LiveTitleController.FadeIn(float,float) at %p\n");
 		ADD_HOOK(LiveTitleController_FadeOut, "Gallop.Live.LiveTitleController.FadeOut(float,float) at %p\n");
+		ADD_HOOK(LiveTitleController_AlterUpdate, "LiveTitleController_AlterUpdate at %p\n");*/
+		ADD_HOOK(FadeGui_SetAlpha, "FadeGui_SetAlpha at %p\n");
 		//ADD_HOOK(Unity_Post, "Unity_Post at %p\n");
 		ADD_HOOK(RaceUI_SetRaceUIActive, "RaceUI.SetRaceUIActive(bool) at %p\n");
 		ADD_HOOK(RaceUI_SetVisibleRank, "RaceUI.SetVisibleRank(bool) at %p\n");
@@ -2395,7 +3503,7 @@ using namespace std;
 		ADD_HOOK(Live_Cutt_AlterLateUpdate_CameraMotion, "Live_Cutt_AlterLateUpdate_CameraMotion at %p\n");
 		ADD_HOOK(Live_Cutt_AlterUpdate_EyeCameraPosition, "Live_Cutt_AlterUpdate_EyeCameraPosition at %p\n");
 		ADD_HOOK(Live_Cutt_AlterUpdate_EyeCameraLookAt, "Live_Cutt_AlterUpdate_EyeCameraLookAt at %p\n");
-		ADD_HOOK(GameSystem_SoftwareReset, " GameSystem_SoftwareReset at %p\n");
+		//ADD_HOOK(GameSystem_SoftwareReset, " GameSystem_SoftwareReset at %p\n");
 		ADD_HOOK(GallopUtil_GotoTitleOnError, "GallopUtil_GotoTitleOnError at %p\n");
 		ADD_HOOK(TapEffectController_ctor, "TapEffectController_ctor at %p\n");
 		ADD_HOOK(Cute_Core_Device_GetPersistentDataPath, "Cute_Core_Device_GetPersistentDataPath at %p\n");
@@ -2403,10 +3511,48 @@ using namespace std;
 		ADD_HOOK(textutil_getstatictext, "textutil_getstatictext at %p\n");
 		ADD_HOOK(apply_graphics_quality, "Gallop.GraphicSettings.ApplyGraphicsQuality at %p\n");
 		ADD_HOOK(unityengine_get_persistentDataPath, "unityengine_get_persistentDataPath at %p\n");
+		ADD_HOOK(MasterEventMotionData_GetAnimCommand, "MasterEventMotionData_GetAnimCommand at %p\n");
+		ADD_HOOK(ModelController_GetCardId, "ModelController_GetCardId at %p\n");
+
+		ADD_HOOK(get_camera_pos, "get_camera_pos at %p\n");
+		ADD_HOOK(get_camera_pos2, "get_camera_pos2 at %p\n");
+
+		ADD_HOOK(Screen_set_orientation, "Gallop.NowLoading::Show at %p\n");
+		ADD_HOOK(ChangeScreenOrientation, "Gallop.NowLoading::Show at %p\n");
+
+		if (g_force_landscape) {
+			auto enumerator1 = reinterpret_cast<Il2CppObject * (*)()>(il2cpp_symbols::get_method_pointer(
+				"umamusume.dll",
+				"Gallop",
+				"Screen", "ChangeScreenOrientationLandscapeAsync", -1))();
+			auto move_next1 = reinterpret_cast<void* (*)(
+				Il2CppObject * _this)>(il2cpp_class_get_method_from_name(enumerator1->klass,
+					"MoveNext",
+					0)->methodPointer);
+			move_next1(enumerator1);
+		}
+
+		ADD_HOOK(set_antialiasing, "UnityEngine.CoreModule.QualitySettings.set_antiAliasing at %p\n");
+		ADD_HOOK(graphics_quality, "Gallop.GraphicSettings.ApplyGraphicsQuality at %p\n");
+		ADD_HOOK(set_vsync_count, "UnityEngine.CoreModule.QualitySettings.set_vSyncCount at %p\n");
+		ADD_HOOK(set_RenderTextureAntiAliasing, "set_RenderTextureAntiAliasing at %p\n");
+		ADD_HOOK(Get3DAntiAliasingLevel, "Get3DAntiAliasingLevel at %p\n");
+		ADD_HOOK(change_resize_ui_for_pc, "change_resize_ui_for_pc at %p\n");
+		ADD_HOOK(ProcessMouseEvent, "ProcessMouseEvent at %p\n");
+		//ADD_HOOK(BootSystem_Awake, "BootSystem_Awake at %p\n");
+		ADD_HOOK(Gallop_SceneManager_LoadScene, "Gallop_SceneManager_LoadScene at %p\n");
+		set_vsync_count_hook(1);
+
+
+
+		//ADD_HOOK(RaceSkillCutInHelper_Owner_CreateAddChara, "RaceSkillCutInHelper$$Owner_CreateAddChara at %p\n");
+		//ADD_HOOK(cyan_localfile_pathresolver_getlocalpath, "_Cyan_GetLocalPath at %p\n");
 		//ADD_HOOK(unity_font_ctor, "unity_font_ctor(string) at %p\n");
 		//ADD_HOOK(assetbundleHelper_IsNeedManifestSetup, "assetbundleHelper_IsNeedManifestSetup at %p\n");
 		//ADD_HOOK(assetbundleHelper_IsExistGallopResources, "assetbundleHelper_IsExistGallopResources at %p\n");
 		//ADD_HOOK(UnityEngine_GameObject_ctor, "UnityEngine_GameObject_ctor(string) at %p\n");
+		//ADD_HOOK(UnityEngine_GameObject_ctor1, "UnityEngine_GameObject_ctor1() at %p\n");
+		//ADD_HOOK(UnityEngine_GameObject_ctor2, "UnityEngine_GameObject_ctor2 at %p\n");
 		//ADD_HOOK(GetKeyDown, "UnityEngine.Input.GetKeyDown at %p\n");
 		//ADD_HOOK(Unity_KeyboardEvent, "Unity_KeyboardEvent at %p\n");
 		//ADD_HOOK(Live_Cutt_AlterUpdate, "Live_Cutt_AlterUpdate at %p\n");
@@ -2420,9 +3566,10 @@ using namespace std;
 		if (g_max_fps > -1)
 		{
 			// break 30-40fps limit
-			ADD_HOOK(set_fps, "UnityEngine.Application.set_targetFrameRate at %p \n");
+			//ADD_HOOK(set_fps, "UnityEngine.Application.set_targetFrameRate at %p \n");
 		}
-		
+		ADD_HOOK(set_fps, "UnityEngine.Application.set_targetFrameRate at %p \n");
+
 		if (g_unlock_size)
 		{
 			// break 1080p size limit
@@ -2437,9 +3584,9 @@ using namespace std;
 			ADD_HOOK(canvas_scaler_setres, "UnityEngine.UI.CanvasScaler::set_referenceResolution at %p\n");
 		}
 
+		ADD_HOOK(set_resolution, "UnityEngine.Screen.SetResolution(int, int, bool) at %p\n");
 		if (g_auto_fullscreen)
-		{
-			ADD_HOOK(set_resolution, "UnityEngine.Screen.SetResolution(int, int, bool) at %p\n");
+		{			
 			//ADD_HOOK(setExclusiveFullScreen, "UnityEngine.Screen.SetResolution(int, int, int(enum),int) at %p\n");
 			adjust_size();
 		}
@@ -2451,29 +3598,65 @@ using namespace std;
 	}
 
 	void hook_beforeboot() {
-		printf("Patch before game boot...\n");
+		if (!beforePatched) {
+			printf("Patch before game boot...\n");
 
-		auto il2cpp_module = GetModuleHandle("GameAssembly.dll");
+			auto il2cpp_module = GetModuleHandle(L"GameAssembly.dll");
 
-		// load il2cpp exported functions
-		il2cpp_symbols::init(il2cpp_module);
+			// load il2cpp exported functions
+			il2cpp_symbols::init(il2cpp_module);
 
-		auto unityengine_get_persistentDataPath_addr = reinterpret_cast<Il2CppString * (*)()>(
-			il2cpp_symbols::get_method_pointer(
-				"UnityEngine.CoreModule.dll", "UnityEngine",
-				"Application", "get_persistentDataPath", 0
-			));
-		MH_CreateHook((LPVOID)unityengine_get_persistentDataPath_addr, unityengine_get_persistentDataPath_hook, &unityengine_get_persistentDataPath_orig);
-		MH_EnableHook((LPVOID)unityengine_get_persistentDataPath_addr);
+
+			auto unityengine_get_persistentDataPath_addr = il2cpp_resolve_icall("UnityEngine.Application::get_persistentDataPath()");/*reinterpret_cast<Il2CppString * (*)()>(
+				il2cpp_symbols::get_method_pointer(
+					"UnityEngine.CoreModule.dll", "UnityEngine",
+					"Application", "get_persistentDataPath", 0
+				));*/
+			MH_CreateHook((LPVOID)unityengine_get_persistentDataPath_addr, unityengine_get_persistentDataPath_hook, &unityengine_get_persistentDataPath_orig);
+			MH_EnableHook((LPVOID)unityengine_get_persistentDataPath_addr);
+
+			/*auto BootSystem_Awake_addr = reinterpret_cast<void (*)(Il2CppObject*)>(il2cpp_symbols::get_method_pointer(
+				"umamusume.dll",
+				"Gallop", "BootSystem", "Awake", 0));
+
+			printf("bootsystemptr = %p\n", BootSystem_Awake_addr);
+
+			MH_CreateHook((LPVOID)BootSystem_Awake_addr, BootSystem_Awake_hook, &BootSystem_Awake_orig);
+			MH_EnableHook((LPVOID)BootSystem_Awake_addr);*/
+
+
+			/*MH_CreateHook((LPVOID)cyan_localfile_pathresolver_getlocalpath_addr, unityengine_get_persistentDataPath_hook, &cyan_localfile_pathresolver_getlocalpath_orig);
+			MH_EnableHook((LPVOID)cyan_localfile_pathresolver_getlocalpath_addr);*/
+
+			beforePatched = true;
+		}
+		
 	}
 
 	void startThread() {
-		std::thread t1(meterDataSendThread);
-		t1.detach();
-		printf("Horse data send Thread started\n");
+		//std::thread t1(meterDataSendThread);
+		//t1.detach();
+		//printf("Horse data send Thread started\n");
+		thread([]() {
+			auto tr = il2cpp_thread_attach(il2cpp_domain_get());
+			keyDownCheckThread();
+			il2cpp_thread_detach(tr);
+			}).detach();
 
-		std::thread t2(keyDownCheckThread);
-		t2.detach();
+		/*std::thread t2(keyDownCheckThread);
+		t2.detach();*/
+
+		/*std::thread t3(imguiwindow);
+		t3.detach();*/
+
+		//thread([]() {
+		//	auto tr = il2cpp_thread_attach(il2cpp_domain_get());
+
+		//	//printf("I am Running In Here!!!\n");
+		//	imguiwindow();
+
+		//	il2cpp_thread_detach(tr);
+		//}).detach();
 	}
 
 	std::string current_time()
@@ -2505,9 +3688,11 @@ using namespace std;
 		//server_ip;
 		int ret = 0;
 		
-		char buf[256];
-		sprintf_s(buf, "umamusume_L [%s %d]", currentUrl.path().c_str(), compressedSize);
+		wchar_t buf[256];
+		//wprintf(L"%s\n", currentUrl.path().c_str());
+		swprintf_s(buf, L"umamusume_L [%s %d]", wstring(currentUrl.path().begin(),currentUrl.path().end()).c_str(), compressedSize);
 		SetWindowText(currenthWnd, buf);
+
 
 		if (g_lz4Encrypt) {
 			decrypted = new char[dstCapacity];
@@ -2677,7 +3862,7 @@ using namespace std;
 
 		
 
-		auto libnative_module = GetModuleHandle("libnative.dll");
+		auto libnative_module = GetModuleHandle(L"libnative.dll");
 		printf("libnative.dll at %p\n", libnative_module);
 		if (libnative_module == nullptr)
 		{
@@ -2745,6 +3930,7 @@ bool init_hook()
 	MH_CreateHook(LoadLibraryW, load_library_w_hook, &load_library_w_orig);
 	MH_EnableHook(LoadLibraryW);
 
+
 	return true;
 }
 
@@ -2804,3 +3990,777 @@ DWORD getCurrentDisplayHz() {
 	//free(&devmode);
 	return devmode.dmDisplayFrequency;
 }
+
+#pragma region GuiFunc
+
+//static ID3D11Device* pDevice = NULL;
+//static ID3D11DeviceContext* pContext = NULL;
+//static IDXGISwapChain* g_pSwapChain = NULL;
+//static ID3D11RenderTargetView* mainRenderTargetView = NULL;
+
+static vector<void*> rootObjList;
+static bool show_info_window = false;
+static void* selected_obj = 0;
+static bool show_active_box = false;
+
+
+int CALLBACK EnumFontFamExProc(
+	const LOGFONT* lpelfe, const TEXTMETRIC* lpntme,
+	DWORD FontType, LPARAM lparam)
+{
+	std::wstring* ptrTargetFaceName = reinterpret_cast<std::wstring*>(lparam);
+	if (*ptrTargetFaceName == lpelfe->lfFaceName) { return 0; }
+	else { return 1; }
+}
+bool IsFontExistOnSystem(const std::string& iFontKey)
+{
+	HDC pDC = GetDC(NULL);
+	LOGFONT logFont;
+
+	// Set font information structure.
+	logFont.lfCharSet = DEFAULT_CHARSET;
+	logFont.lfPitchAndFamily = 0;
+
+	// @reference https://www.gpgstudy.com/forum/viewtopic.php?t=7047
+	std::wstring fontKey;
+	{
+		USES_CONVERSION;
+		fontKey = A2W(iFontKey.c_str());
+	}
+	wcscpy(logFont.lfFaceName, fontKey.c_str());
+
+	// EnumFontFamiliesEXW (Multi-byte dirty function) returns `0` when found given font face-name.
+	const auto flag = EnumFontFamiliesExW(pDC, &logFont, EnumFontFamExProc, reinterpret_cast<LPARAM>(&fontKey), 0);
+	return flag == 0;
+}
+std::optional<std::string> GetFontPathOnSystem(const std::string& iFontKey)
+{
+	// Check validity.
+	if (IsFontExistOnSystem(iFontKey) == false) { return std::nullopt; }
+
+	// @reference https://www.gpgstudy.com/forum/viewtopic.php?t=7047
+	std::wstring fontFacename;
+	{
+		USES_CONVERSION;
+		fontFacename = A2W(iFontKey.c_str());
+	}
+
+	// Find path using registry.
+	static const auto fontRegistryPath = L"Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts";
+	HKEY hKey;
+
+	{ // Open Windows font registry key
+		const auto result = RegOpenKeyEx(HKEY_LOCAL_MACHINE, fontRegistryPath, 0, KEY_READ, &hKey);
+		if (result != ERROR_SUCCESS) { return std::nullopt; }
+	}
+
+	DWORD maxValueNameSize, maxValueDataSize;
+	{
+		const auto result = RegQueryInfoKey(hKey, 0, 0, 0, 0, 0, 0, 0, &maxValueNameSize, &maxValueDataSize, 0, 0);
+		if (result != ERROR_SUCCESS) { return std::nullopt; }
+	}
+
+	DWORD valueIndex = 0;
+	LPWSTR valueName = new WCHAR[maxValueNameSize];
+	LPBYTE valueData = new BYTE[maxValueDataSize];
+	DWORD valueNameSize, valueDataSize, valueType;
+	std::wstring wsFontFile;
+
+	{ // Look for a matching font name
+		LONG result;
+		do
+		{
+			wsFontFile.clear();
+			valueDataSize = maxValueDataSize;
+			valueNameSize = maxValueNameSize;
+
+			result = RegEnumValue(hKey, valueIndex, valueName, &valueNameSize, 0, &valueType, valueData, &valueDataSize);
+			valueIndex++;
+
+			if (result != ERROR_SUCCESS || valueType != REG_SZ) { continue; }
+			// Find a match. 
+			std::wstring wsValueName(valueName, valueNameSize);
+			if (wsValueName.find(fontFacename) != std::wstring::npos)
+			{
+				wsFontFile.assign((LPWSTR)valueData, valueDataSize); break;
+			}
+		} while (result != ERROR_NO_MORE_ITEMS);
+	}
+
+	// Release temporary chunk.
+	delete[] valueName; delete[] valueData;
+
+	// Close registry.
+	RegCloseKey(hKey);
+	if (wsFontFile.empty()) { return std::nullopt; }
+
+	// Build full font file path
+	WCHAR winDir[MAX_PATH];
+	GetWindowsDirectory(winDir, MAX_PATH);
+
+	std::wstringstream ss; ss << winDir << "\\Fonts\\" << wsFontFile;
+	wsFontFile = ss.str();
+
+	return std::string(wsFontFile.begin(), wsFontFile.end());
+}
+
+
+
+
+
+//닒츰냔櫓삿혤잚謹츰
+string getTypeName(string name) {
+	int left = name.rfind('(') + 1;
+	int right = name.rfind(')');
+
+	return name.substr(left, right - left);
+}
+
+string delArrayName(string name) {
+	int left = name.rfind('[');
+	return name.substr(0, left);
+}
+
+
+
+//寧몸鬼鬼狂뵀
+static void HelpMarker(const char* desc)
+{
+	ImGui::TextDisabled("(?)");
+	if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+	{
+		ImGui::BeginTooltip();
+		ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+		ImGui::TextUnformatted(desc);
+		ImGui::PopTextWrapPos();
+		ImGui::EndTooltip();
+	}
+}
+
+static void HelpMarker(void* image,int width, int height, const char* desc)
+{
+	ImGui::TextDisabled("(?)");
+	if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+	{
+		ImGui::BeginTooltip();
+		ImGui::Image((void*)image, ImVec2(width, height));
+		ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+		ImGui::TextUnformatted(desc);
+		ImGui::PopTextWrapPos();
+		ImGui::EndTooltip();
+	}
+}
+void BeginGroupPanel(const char* name, const ImVec2& size = ImVec2(0.0f, 0.0f));
+void EndGroupPanel();
+
+void BeginGroupPanel(const char* name, const ImVec2& size)
+{
+	ImGui::BeginGroup();
+
+	auto cursorPos = ImGui::GetCursorScreenPos();
+	auto itemSpacing = ImGui::GetStyle().ItemSpacing;
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+
+	auto frameHeight = ImGui::GetFrameHeight();
+	ImGui::BeginGroup();
+
+	ImVec2 effectiveSize = size;
+	//if (size.x < 0.0f)
+	//	effectiveSize.x = ImGui::GetContentRegionAvailWidth();
+	//else
+		effectiveSize.x = size.x;
+	ImGui::Dummy(ImVec2(effectiveSize.x, 0.0f));
+
+	ImGui::Dummy(ImVec2(frameHeight * 0.5f, 0.0f));
+	ImGui::SameLine(0.0f, 0.0f);
+	ImGui::BeginGroup();
+	ImGui::Dummy(ImVec2(frameHeight * 0.5f, 0.0f));
+	ImGui::SameLine(0.0f, 0.0f);
+	ImGui::TextUnformatted(name);
+	auto labelMin = ImGui::GetItemRectMin();
+	auto labelMax = ImGui::GetItemRectMax();
+	ImGui::SameLine(0.0f, 0.0f);
+	ImGui::Dummy(ImVec2(0.0, frameHeight + itemSpacing.y));
+	ImGui::BeginGroup();
+
+	//ImGui::GetWindowDrawList()->AddRect(labelMin, labelMax, IM_COL32(255, 0, 255, 255));
+
+	ImGui::PopStyleVar(2);
+
+#if IMGUI_VERSION_NUM >= 17301
+	ImGui::GetCurrentWindow()->ContentRegionRect.Max.x -= frameHeight * 0.5f;
+	ImGui::GetCurrentWindow()->WorkRect.Max.x -= frameHeight * 0.5f;
+	ImGui::GetCurrentWindow()->InnerRect.Max.x -= frameHeight * 0.5f;
+#else
+	ImGui::GetCurrentWindow()->ContentsRegionRect.Max.x -= frameHeight * 0.5f;
+#endif
+	ImGui::GetCurrentWindow()->Size.x -= frameHeight;
+
+	auto itemWidth = ImGui::CalcItemWidth();
+	ImGui::PushItemWidth(ImMax(0.0f, itemWidth - frameHeight));
+
+	s_GroupPanelLabelStack.push_back(ImRect(labelMin, labelMax));
+}
+
+void EndGroupPanel()
+{
+	ImGui::PopItemWidth();
+
+	auto itemSpacing = ImGui::GetStyle().ItemSpacing;
+
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+
+	auto frameHeight = ImGui::GetFrameHeight();
+
+	ImGui::EndGroup();
+
+	//ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), IM_COL32(0, 255, 0, 64), 4.0f);
+
+	ImGui::EndGroup();
+
+	ImGui::SameLine(0.0f, 0.0f);
+	ImGui::Dummy(ImVec2(frameHeight * 0.5f, 0.0f));
+	ImGui::Dummy(ImVec2(0.0, frameHeight - frameHeight * 0.5f - itemSpacing.y));
+
+	ImGui::EndGroup();
+
+	auto itemMin = ImGui::GetItemRectMin();
+	auto itemMax = ImGui::GetItemRectMax();
+	//ImGui::GetWindowDrawList()->AddRectFilled(itemMin, itemMax, IM_COL32(255, 0, 0, 64), 4.0f);
+
+	auto labelRect = s_GroupPanelLabelStack.back();
+	s_GroupPanelLabelStack.pop_back();
+
+	ImVec2 halfFrame = ImVec2(frameHeight * 0.25f, frameHeight) * 0.5f;
+	ImRect frameRect = ImRect(itemMin + halfFrame, itemMax - ImVec2(halfFrame.x, 0.0f));
+	labelRect.Min.x -= itemSpacing.x;
+	labelRect.Max.x += itemSpacing.x;
+	for (int i = 0; i < 4; ++i)
+	{
+		switch (i)
+		{
+			// left half-plane
+		case 0: ImGui::PushClipRect(ImVec2(-FLT_MAX, -FLT_MAX), ImVec2(labelRect.Min.x, FLT_MAX), true); break;
+			// right half-plane
+		case 1: ImGui::PushClipRect(ImVec2(labelRect.Max.x, -FLT_MAX), ImVec2(FLT_MAX, FLT_MAX), true); break;
+			// top
+		case 2: ImGui::PushClipRect(ImVec2(labelRect.Min.x, -FLT_MAX), ImVec2(labelRect.Max.x, labelRect.Min.y), true); break;
+			// bottom
+		case 3: ImGui::PushClipRect(ImVec2(labelRect.Min.x, labelRect.Max.y), ImVec2(labelRect.Max.x, FLT_MAX), true); break;
+		}
+
+		ImGui::GetWindowDrawList()->AddRect(
+			frameRect.Min, frameRect.Max,
+			ImColor(ImGui::GetStyleColorVec4(ImGuiCol_Border)),
+			halfFrame.x);
+
+		ImGui::PopClipRect();
+	}
+
+	ImGui::PopStyleVar(2);
+
+#if IMGUI_VERSION_NUM >= 17301
+	ImGui::GetCurrentWindow()->ContentRegionRect.Max.x += frameHeight * 0.5f;
+	ImGui::GetCurrentWindow()->WorkRect.Max.x += frameHeight * 0.5f;
+	ImGui::GetCurrentWindow()->InnerRect.Max.x += frameHeight * 0.5f;
+#else
+	ImGui::GetCurrentWindow()->ContentsRegionRect.Max.x += frameHeight * 0.5f;
+#endif
+	ImGui::GetCurrentWindow()->Size.x += frameHeight;
+
+	ImGui::Dummy(ImVec2(0.0f, 0.0f));
+
+	ImGui::EndGroup();
+}
+
+//wchar_t* GetCharaNameByCharaId(int charaId) {
+//	auto getname = reinterpret_cast<Il2CppString* (*)(int)>(
+//		il2cpp_symbols::get_method_pointer(
+//			"umamusume.dll", "Gallop",
+//			"MasterDataUtil", "GetCharaNameByCharaId", 1
+//		)
+//	);	
+//	Il2CppString* ret = getname(charaId);
+//	wprintf(L"%s\n", ret->start_char);
+//	return ret->start_char;
+//}
+
+//bool get_IsCameraShake() {
+//	bool isCameraShake = false;
+//	Il2CppClass* klass = (Il2CppClass*)il2cpp_symbols::get_class("umamusume.dll", "Gallop", "LiveQualitySettings");
+//	//LiveQualitySettings* sett = { (LiveQualitySettings*)il2cpp_symbols::get_class("umamusume.dll", "Gallop", "LiveQualitySettings") };
+//	FieldInfo* field = il2cpp_class_get_field_from_name(klass, "IsCameraShake");
+//	isCameraShake = il2cpp_symbols::GetStaticFieldValue(field);
+//	printf("%d\n",isCameraShake );
+//	return isCameraShake;
+//		//il2cpp_field_static_get_value();
+//}
+
+
+#pragma endregion
+
+
+#pragma region GuiMain
+//************************************************************************************************************
+
+
+// Forward declarations of helper functions
+bool CreateDeviceD3D(HWND hWnd);
+void CleanupDeviceD3D();
+void CreateRenderTarget();
+void CleanupRenderTarget();
+LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+// Main code loop
+int imguiwindow()
+{
+	//printf("imguiwindow()\n");
+	/*ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO();
+	io.ConfigFlags = ImGuiConfigFlags_NoMouseCursorChange;
+	ImGui_ImplWin32_Init(umaWindow);
+	ImGui_ImplDX11_Init(pDevice, pContext);
+	static const ImWchar ranges[] = { 0x0001, 0xffff, 0 };
+	io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\malgun.ttf", 25.0f, NULL, ranges);*/
+
+	// Create application window
+	//ImGui_ImplWin32_EnableDpiAwareness();
+
+	//WNDCLASSEX wc = { sizeof(WNDCLASSEX), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(NULL), NULL, NULL, NULL, NULL, _T("UmamusumeSettings"), NULL };
+	//::RegisterClassEx(&wc);
+	//HWND hwnd = ::CreateWindow(wc.lpszClassName, L"설정", WS_OVERLAPPEDWINDOW, 100, 100, 800,1000, NULL, NULL, wc.hInstance, NULL);
+	//imguiWnd = hwnd;
+
+	//// Initialize Direct3D
+	//if (!CreateDeviceD3D(hwnd))
+	//{
+	//	CleanupDeviceD3D();
+	//	::UnregisterClass(wc.lpszClassName, wc.hInstance);
+	//	return 1;
+	//}
+
+	//// Show the window
+	//::ShowWindow(hwnd, SW_HIDE);
+	//::UpdateWindow(hwnd);
+
+	//EnableCloseButton(hwnd, false);
+
+	// Setup Dear ImGui context
+	/*IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO(); (void)io;*/
+	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+
+	// Setup Dear ImGui style
+	
+	//ImGui::StyleColorsLight();
+
+	// Setup Platform/Renderer backends
+	//ImGui_ImplWin32_Init(hwnd);
+	//ImGui_ImplDX11_Init(pDevice, pContext);
+
+	// Load Fonts
+	// - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont() to select them.
+	// - AddFontFromFileTTF() will return the ImFont* so you can store it if you need to select the font among multiple.
+	// - If the file cannot be loaded, the function will return NULL. Please handle those errors in your application (e.g. use an assertion, or display an error and quit).
+	// - The fonts will be rasterized at a given size (w/ oversampling) and stored into a texture when calling ImFontAtlas::Build()/GetTexDataAsXXXX(), which ImGui_ImplXXXX_NewFrame below will call.
+	// - Read 'docs/FONTS.md' for more instructions and details.
+	// - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
+	//io.Fonts->AddFontDefault();
+	//io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
+	//io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
+	//io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
+	//io.Fonts->AddFontFromFileTTF("../../misc/fonts/ProggyTiny.ttf", 10.0f);
+	//ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ARIALUNI.TTF", 18.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
+
+	// Check japanese (meiryo UI) font is exist on system. 
+	//{
+	//	std::string japaneseFontName = "";
+	//	if (IsFontExistOnSystem("Malgun Gothic (TrueType)") == true) { japaneseFontName = "Malgun Gothic (TrueType)"; }
+
+	//	// If font name is found, add font file to imgui. Otherwise, just pass it.
+	//	if (japaneseFontName.empty() == false)
+	//	{
+	//		// Get system font path from manager.
+	//		const auto optPath = GetFontPathOnSystem(japaneseFontName);
+	//		//MDY_ASSERT_FORCE(optPath.has_value() == true, "Unexpected error occurred.");
+	//		// Create glyphs.
+	//		io.Fonts->AddFontFromFileTTF(optPath.value().c_str(), 18.0f, nullptr, io.Fonts->GetGlyphRangesKorean());
+	//	}
+	//}
+
+	/*static const ImWchar ranges[] = { 0x0001, 0xffff, 0 };
+	io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\malgun.ttf", 25.0f, NULL, ranges);*/
+
+
+
+	//IM_ASSERT(font != NULL);
+
+	// Our state
+	bool show_demo_window = false;
+	bool show_tool_window = true;
+	bool show_obj_window = false;
+
+	bool enable_edit = false;
+	bool camera_base = false;
+
+
+	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
+
+
+	// Main loop
+	bool done = false;
+	//while (!done)
+	{
+		//printf("imgui_loop in\n");
+		// Poll and handle messages (inputs, window resize, etc.)
+		// See the WndProc() function below for our to dispatch events to the Win32 backend.
+		//MSG msg;
+		/*while (::PeekMessage(&msg, NULL, 0U, 0U, PM_REMOVE))
+		{
+			::TranslateMessage(&msg);
+			::DispatchMessage(&msg);
+			if (msg.message == WM_QUIT)
+				done = true;
+		}
+		if (done)
+			break;*/
+
+		// Start the Dear ImGui frame
+		ImGui_ImplDX11_NewFrame();
+		ImGui_ImplWin32_NewFrame();
+		ImGui::NewFrame();
+
+		// 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
+		if (show_demo_window)
+			ImGui::ShowDemoWindow(&show_demo_window);
+
+		// 2. Show a simple window that we create ourselves. We use a Begin/End pair to created a named window.
+		if(imgui_settingwnd_open) 
+		{
+			static float f = 0.0f;
+			static int counter = 0;
+			
+
+			ImGui::Begin("설정 메뉴 (토글 키: F12)", &imgui_settingwnd_open);                          // Create a window called "Hello, world!" and append into it.
+			
+			
+			
+			//ImGui::SetNextWindowPos();
+			ImGui::Text("Host: %s", g_customHost);
+
+			if (ImGui::CollapsingHeader("게임 시스템", ImGuiTreeNodeFlags_DefaultOpen)) {
+
+				BeginGroupPanel("그래픽");
+				ImGui::Checkbox("자동 fps 설정", &g_autofps); ImGui::SameLine(); HelpMarker("모니터 Hz 수에 맞춰서 fps를 자동 설정합니다.");
+				ImGui::SliderInt("FPS 제한", &g_max_fps, 0, 240); ImGui::SameLine(); HelpMarker("제한할 fps를 설정합니다. \"자동 fps 설정\" 이 비활성화 된 경우에만 작동합니다.\n(0인 경우 제한없음)");
+				if (ImGui::Button("적용")) {
+					set_fps_hook(g_max_fps);
+				} ImGui::SameLine(); HelpMarker("fps 제한을 적용합니다.");
+
+				ImGui::Checkbox("강제 가로모드", &g_force_landscape); ImGui::SameLine(); HelpMarker("게임을 가로 모드로 고정합니다.\n변경 내용은 게임 리셋 시 적용됩니다.");
+				ImGui::Checkbox("자동 전체화면", &g_auto_fullscreen); ImGui::SameLine(); HelpMarker("가로모드 시 자동으로 전체화면이 됩니다.");
+				ImGui::Checkbox("고품질 그래픽", &g_highquality); ImGui::SameLine(); HelpMarker("안티 에일리어싱, MSAA 허용 등 전반적인 3D 그래픽 품질을 높입니다.\n변경 내용은 게임 리셋 시 적용됩니다.");
+				ImGui::SliderFloat("UI 배율", &g_ui_scale, 0.1, 10.0, "%.1f"); ImGui::SameLine(); HelpMarker("GUI의 배율을 설정합니다.\n변경 내용은 게임 리셋 시 적용됩니다.");
+				
+				EndGroupPanel();
+
+				BeginGroupPanel("배속");
+				float timescale = get_TimeScale();
+				if (ImGui::SliderFloat("게임 배속", &timescale, 0.0, 10.0, "%.4f")) {
+					set_TimeScale(timescale);
+				}ImGui::SameLine(); HelpMarker("게임의 배속을 설정합니다.\n단축키: LCtrl+PGUP, LCtrl+PGDN");
+				if (ImGui::Button("정지"))
+					set_TimeScale(0.0);
+				ImGui::SameLine();
+				HelpMarker("배속을 0.0으로 설정합니다.\n단축키: LCtrl+P");
+				ImGui::SameLine();
+				if (ImGui::Button("초기화"))
+					set_TimeScale(1.0);
+				ImGui::SameLine(); HelpMarker("배속을 기본값인 1.0으로 설정합니다.\n단축키: LCtrl+END");
+				EndGroupPanel();
+
+
+				BeginGroupPanel("시스템");
+				ImGui::Checkbox("강제 리셋 허용", &g_gotoTitleOnError); ImGui::SameLine(); HelpMarker("게임 내에서 강제적으로 타이틀 화면으로 돌아가는 동작을 허용합니다.");
+				EndGroupPanel();
+
+
+				
+			}
+			
+			if (ImGui::CollapsingHeader("레이스", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::SliderFloat("등수 표시기 출력 위치", &g_rankUIShowMeter,0.0,3000.0,"%.2f M"); ImGui::SameLine(); HelpMarker("레이스 시작 후 등수 표시기를 출력할 위치를 정합니다.\n(LCtrl+슬라이더 클릭으로 직접 입력 가능)");
+				ImGui::SliderFloat("등수 표시기 숨김 위치", &g_rankUIHideoffset,0.0,9999.0,"%.2f"); ImGui::SameLine(); HelpMarker("등수 표시기를 숨길 타이밍을 지정합니다.\n(LCtrl+슬라이더 클릭으로 직접 입력 가능)");
+				ImGui::Checkbox("착순 마크 표시", &showFinishOrderFlash); ImGui::SameLine(); HelpMarker("레이스 결과 화면에서 착순 애니메이션을 표시합니다.");
+			}
+
+			if (ImGui::CollapsingHeader("라이브", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::Checkbox("라이브 카메라 멈추기", &c_stopLiveCam); ImGui::SameLine(); HelpMarker("라이브에서 카메라 워크를 정지합니다.\n단축키: S");
+				ImGui::Checkbox("라이브 제목 창 출력", &g_showLiveTitleWindow); ImGui::SameLine(); HelpMarker("라이브 시작 시 제목 창을 표시합니다.");				
+				//ImGui::Checkbox("isCameraShake", &IsCamShake);
+				
+			}
+			
+			if (ImGui::CollapsingHeader("???", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::Checkbox("키무라 챌린지", &isKimuraChallenge); ImGui::SameLine(); HelpMarker(texture_kimura, kimura_image_width, kimura_image_height, "\"야떼미로-\"");
+				ImGui::Checkbox("Urara", &g_walkMotionAllUrara); ImGui::SameLine(); HelpMarker("홈화면 캐릭터들의 도보 모션을 전부 우라라 전용 모션으로 설정합니다.");
+				ImGui::Checkbox("◆", &g_homeAllDiamond); ImGui::SameLine(); HelpMarker("Just Diamond.");
+				ImGui::Checkbox("Win.564", &g_winMotion564); ImGui::SameLine(); HelpMarker("1착 모션이 캐릭터에 관계없이 전부 골드쉽 모션으로 바뀝니다.\n어이어이, 헛소리 하지 마! 이번에야말로 고루시짱의 시대잖냐아아앗!");
+				//int id = 1001;
+				//if (ImGui::InputInt("GetCharaNameByCharaId", &id, 1, 9999)) {
+				//	//_setmode(_fileno(stdout), _O_U16TEXT); // <=== Windows madness
+				//	 
+				//	 Il2CppString_unk* ret = (Il2CppString_unk*)GetCharaNameByCharaId(id);
+				//	 std::cout << UmaGetString(ret)  << std::endl;
+				//	//ImGui::SameLine();
+				//	ImGui::Text("%s",  UmaGetString(ret));
+				//}
+			}
+			if (ImGui::CollapsingHeader("디버그 정보")) {
+				if (ImGui::TreeNode("Hooked List")) {
+					ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
+					ImGui::BeginChild("ChildL", ImVec2(ImGui::GetContentRegionAvail().x, 360), false, window_flags);
+
+					
+					for_each(hooked_addr.begin(), hooked_addr.end(), [&](hookStr& item) {
+						ImGui::Text("[%s]", item.assemblyName);
+						ImGui::SameLine();
+						ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "%s.", item.namespaceName);
+						ImGui::SameLine();
+						ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.5f, 1.0f), "%s.", item.className);
+						ImGui::SameLine();
+						ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "%s(%d)", item.methodName, item.argsCount);
+						ImGui::SameLine();
+						ImGui::Text(" = 0x%p ", item.addr);
+						});
+					ImGui::EndChild();
+					ImGui::TreePop();
+				}
+				
+				
+				
+
+				if (masterDBconnection != nullptr) {
+					//std::wstring path = masterDBconnection->dbPath->start_char;
+					ImGui::Text("MasterDBConnection ptr: 0x%p", masterDBconnection->Handle);
+					//ImGui::Text("MasterDBPath: %s", path);
+				}
+				else {
+					ImGui::Text("MasterDBConnection ptr: nullptr");
+					//ImGui::Text("MasterDBPath: nullptr");
+				}
+
+				ImGui::Text("Livecam1 x=% 04.3f, y=% 04.3f, z=% 04.3f", liveCam_pos1.x, liveCam_pos1.y, liveCam_pos1.z);
+
+				//if (liveCam_Lookat != NULL) {
+				//	ImGui::Text("liveCam_Lookat x=% 04.3f, y=% 04.3f, z=% 04.3f", liveCam_Lookat.x, liveCam_Lookat.y, liveCam_Lookat.z);
+				//	//printf("liveCam_Lookat x=% 04.3f, y=% 04.3f, z=% 04.3f\n", liveCam_Lookat->x, liveCam_Lookat->y, liveCam_Lookat->z);
+				//}
+				//else {
+				//	ImGui::Text("liveCam_Lookat is nullptr");
+				//}
+				//if (liveCam_pos1 != NULL) {
+				//	ImGui::Text("Livecam1 x=% 04.3f, y=% 04.3f, z=% 04.3f", liveCam_pos1.x, liveCam_pos1.y, liveCam_pos1.z);
+				//}
+				//else {
+				//	ImGui::Text("Livecam1 is nullptr");
+				//}
+				//if (liveCam_pos2 != NULL) {
+				//	ImGui::Text("Livecam2 x=% 04.3f, y=% 04.3f, z=% 04.3f", liveCam_pos2.x, liveCam_pos2.y, liveCam_pos2.z);
+				//}
+				//else {
+				//	ImGui::Text("Livecam2 is nullptr");
+				//}
+
+				
+
+			}
+
+			
+			
+			
+
+			
+			ImGui::Separator();
+			if (ImGui::Button("타이틀로 돌아가기 (게임 리셋)")) {
+				ResetGame();
+			} ImGui::SameLine(); HelpMarker("단축키: LCtrl+R");
+
+			if (ImGui::Button("게임 종료"))
+				ImGui::OpenPopup("확인");
+			
+
+			bool open = true;
+			if (ImGui::BeginPopupModal("확인", &open))
+			{
+				ImGui::Text("정말로 게임을 종료할까요?");
+				if (ImGui::Button("아니오"))
+					ImGui::CloseCurrentPopup();
+				ImGui::SameLine();
+				if (ImGui::Button("예")) {
+					exit(0);
+				}
+					
+				ImGui::EndPopup();
+			}
+			//ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
+			//ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
+
+			
+
+			ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+			ImGui::End();
+		}
+
+		// 3. Show another simple window.
+
+		if (show_obj_window)
+		{
+			ImGui::Begin("Obj Window", &show_obj_window);
+
+			//쉔접疳榴써뭐
+			static ImGuiTreeNodeFlags base_flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanAvailWidth;
+
+			for (int i = 0; i < rootObjList.size(); i++)
+			{
+
+				void* currentObj = rootObjList[i];
+
+				//零寧硅땜鮫
+				ImGuiTreeNodeFlags node_flags = base_flags;
+
+				//objRecursion(currentObj, base_flags);
+				/*
+				if (ObjDic[currentObj].children.size() != 0) {
+					bool node_open = ImGui::TreeNodeEx(currentObj, node_flags, ObjDic[currentObj].name.c_str());
+					if (node_open)
+					{
+						ImGui::BulletText(to_string(ObjDic[currentObj].children.size()).c_str());
+						ImGui::TreePop();
+					}
+				}
+				else {
+					node_flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen; // ImGuiTreeNodeFlags_Bullet
+					ImGui::TreeNodeEx(currentObj, node_flags, ObjDic[currentObj].name.c_str());
+				}
+				*/
+			}
+
+
+			ImGui::End();
+		}
+		// Rendering
+		ImGui::Render();
+		//const float clear_color_with_alpha[4] = { clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w };
+		pContext->OMSetRenderTargets(1, &mainRenderTargetView, NULL);
+		//pContext->ClearRenderTargetView(mainRenderTargetView, clear_color_with_alpha);
+		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+		//oPresent(g_pSwapChain, SyncInterval, Flags);
+		//g_pSwapChain->Present(1, 0); // Present with vsync
+		//g_pSwapChain->Present(0, 0); // Present without vsync
+	}
+
+	// Cleanup
+	/*ImGui_ImplDX11_Shutdown();
+	ImGui_ImplWin32_Shutdown();
+	ImGui::DestroyContext();
+
+	CleanupDeviceD3D();*/
+	/*::DestroyWindow(hwnd);
+	::UnregisterClass(wc.lpszClassName, wc.hInstance);*/
+
+	return 0;
+}
+
+// Helper functions
+
+bool CreateDeviceD3D(HWND hWnd)
+{
+	// Setup swap chain
+	DXGI_SWAP_CHAIN_DESC sd;
+	ZeroMemory(&sd, sizeof(sd));
+	sd.BufferCount = 2;
+	sd.BufferDesc.Width = 0;
+	sd.BufferDesc.Height = 0;
+	sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	sd.BufferDesc.RefreshRate.Numerator = 60;
+	sd.BufferDesc.RefreshRate.Denominator = 1;
+	sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+	sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+	sd.OutputWindow = hWnd;
+	sd.SampleDesc.Count = 1;
+	sd.SampleDesc.Quality = 0;
+	sd.Windowed = TRUE;
+	sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+
+	UINT createDeviceFlags = 0;
+	//createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
+	D3D_FEATURE_LEVEL featureLevel;
+	const D3D_FEATURE_LEVEL featureLevelArray[2] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0, };
+	if (D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &g_pSwapChain, &pDevice, &featureLevel, &pContext) != S_OK)
+		return false;
+
+	CreateRenderTarget();
+	return true;
+}
+
+void CleanupDeviceD3D()
+{
+	CleanupRenderTarget();
+	if (g_pSwapChain) { g_pSwapChain->Release(); g_pSwapChain = NULL; }
+	if (pContext) { pContext->Release(); pContext = NULL; }
+	if (pDevice) { pDevice->Release(); pDevice = NULL; }
+}
+
+void CreateRenderTarget()
+{
+	ID3D11Texture2D* pBackBuffer;
+	g_pSwapChain->GetBuffer(0, IID_PPV_ARGS(&pBackBuffer));
+	pDevice->CreateRenderTargetView(pBackBuffer, NULL, &mainRenderTargetView);
+	pBackBuffer->Release();
+}
+
+void CleanupRenderTarget()
+{
+	if (mainRenderTargetView) { mainRenderTargetView->Release(); mainRenderTargetView = NULL; }
+}
+
+// Forward declare message handler from imgui_impl_win32.cpp
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+// Win32 message handler
+// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
+// - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
+// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
+// Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
+LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
+		return true;
+
+	switch (msg)
+	{
+	case WM_SIZE:
+		if (pDevice != NULL && wParam != SIZE_MINIMIZED)
+		{
+			CleanupRenderTarget();
+			g_pSwapChain->ResizeBuffers(0, (UINT)LOWORD(lParam), (UINT)HIWORD(lParam), DXGI_FORMAT_UNKNOWN, 0);
+			CreateRenderTarget();
+		}
+		return 0;
+	case WM_SYSCOMMAND:
+		if ((wParam & 0xfff0) == SC_KEYMENU) // Disable ALT application menu
+			return 0;
+		break;
+	case WM_DESTROY:
+		::PostQuitMessage(0);
+		return 0;
+	}
+	return ::DefWindowProc(hWnd, msg, wParam, lParam);
+}
+#pragma endregion

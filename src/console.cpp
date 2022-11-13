@@ -67,7 +67,7 @@ namespace {
                     }
                 }
                 else {
-                    MessageBox(NULL, "Config.json parse error", "Error", MB_OK | MB_ICONERROR);
+                    MessageBox(NULL, L"Config.json parse error", L"Error", MB_OK | MB_ICONERROR);
                 }
 
                 config_stream.close();
@@ -220,8 +220,26 @@ namespace {
                     printf_s("Argument Error:\nUsage: story3dCharSet {Character id} {Dress id} {MobID} {HeadID}\n");
                 }
             }
+            else if (line.starts_with("setCardId")) {
+                try {
+                    std::vector < std::string > arg = explode(line, ' ');
+                    int cardId = std::stoi(arg.at(1).c_str());
+                    g_cardid = cardId;
+                    printf_s("Set GetCardid ret: %d\n", cardId);
+                }
+                catch (std::invalid_argument&) {
+                    printf_s("Value Error: please enter number only\n");
+                }
+                catch (std::out_of_range&) {
+                    printf_s("Argument Error:\nUsage: setCardId {Card id}\n");
+                }
+               
+            }
+            else if (line.starts_with("reset")) {
+                printf("Reset game!\n");
+                ResetGame();
+            }
             else {
-
                 printf("%s:Unknown command\n", line.c_str());
             }
         }

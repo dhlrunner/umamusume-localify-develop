@@ -19,6 +19,12 @@
     <Filter Include="PEDump">
       <UniqueIdentifier>{38b6d1d4-d600-43d4-b971-c21faca98956}</UniqueIdentifier>
     </Filter>
+    <Filter Include="imgui">
+      <UniqueIdentifier>{5776ff20-9027-42db-939e-7a04fe1b1571}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="kiero">
+      <UniqueIdentifier>{11998b2d-36f7-48f3-b402-e6d45ac4eb45}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\il2cpp\il2cpp_symbols.hpp">
@@ -52,6 +58,31 @@
     </ClInclude>
     <ClInclude Include="..\src\string.hpp" />
     <ClInclude Include="..\src\url.hpp" />
+    <ClInclude Include="..\src\imgui\imgui.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\imgui\imgui_internal.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\imgui\imstb_rectpack.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\imgui\imstb_textedit.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\imgui\imstb_truetype.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\imgui\backends\imgui_impl_dx11.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\imgui\backends\imgui_impl_win32.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\stb_image.h" />
+    <ClInclude Include="..\src\kiero\kiero.h">
+      <Filter>kiero</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\console.cpp" />
@@ -85,6 +116,30 @@
       <Filter>PEDump</Filter>
     </ClCompile>
     <ClCompile Include="..\src\url.cpp" />
+    <ClCompile Include="..\src\imgui\imgui.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\imgui\imgui_demo.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\imgui\imgui_draw.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\imgui\imgui_tables.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\imgui\imgui_widgets.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\imgui\backends\imgui_impl_dx11.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\imgui\backends\imgui_impl_win32.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\kiero\kiero.cpp">
+      <Filter>kiero</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\src\dllproxy\version.def">

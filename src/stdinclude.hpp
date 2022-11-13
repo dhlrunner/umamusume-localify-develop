@@ -1,6 +1,8 @@
 #pragma once
 #define NOMINMAX
 
+#include "stb_image.h"
+
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 #include <Windows.h>
@@ -41,8 +43,63 @@
 
 #include <cstdio>
 
+#include "imgui/imgui.h"
+#include "imgui/backends/imgui_impl_win32.h"
+#include "imgui/backends/imgui_impl_dx11.h"
+#include "imgui_internal.h"
+
+#include <d3d11.h>
+#include <tchar.h>
+
+#include <atlconv.h>
+
+#include "kiero/kiero.h"
+
+
+#pragma GCC diagnostic ignored "-Wdiv-by-zero"
+#pragma comment(lib, "d3d11.lib")
 #pragma comment(lib,"ws2_32.lib") //Winsock Library
 #pragma execution_character_set( "utf-8" )
+
+
+
+typedef void (*SignalHandlerPointer)(int);
+typedef HRESULT(__stdcall* Present) (IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Flags);
+typedef HRESULT(__stdcall* ResizeBuffers)(IDXGISwapChain* pSwapChain, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags);
+typedef LRESULT(CALLBACK* WNDPROC)(HWND, UINT, WPARAM, LPARAM);
+typedef uintptr_t PTR;
+
+extern Present oPresent;
+extern ID3D11Device* pDevice;
+extern ID3D11DeviceContext* pContext;
+extern HWND umaWindow;
+extern ID3D11RenderTargetView* mainRenderTargetView;
+extern IDXGISwapChain* g_pSwapChain;
+
+extern int imguiwindow();
+extern bool imgui_settingwnd_open;
+
+#pragma region ImGui_Texture
+
+extern int kimura_image_width;
+extern int kimura_image_height;
+extern ID3D11ShaderResourceView* texture_kimura;
+
+#pragma endregion
+
+extern struct hookStr
+{
+	const char* assemblyName;
+	const char* namespaceName;
+	const char* className;
+	const char* methodName;
+	int argsCount;
+	LPVOID addr;
+};
+
+extern std::vector<hookStr> hooked_addr;
+
+extern bool hook_end;
 
 extern int patchCount;
 
@@ -83,5 +140,14 @@ extern int c_story3dCharID;
 extern int c_story3dClothID;
 extern int c_story3dMobid;
 extern int c_story3dHeadID;
+extern bool g_force_landscape;
+extern int g_antialiasing ;
+extern int g_graphics_quality;
+extern int g_vsync_count;
+extern int g_cardid;
+extern bool g_highquality;
+
 
 extern TimelineKeyCharacterType c_gachaCharaType;
+
+void ResetGame();
