@@ -80,7 +80,7 @@
     </Link>
     <PostBuildEvent>
       <Command>copy /y "$(TargetPath)" "D:\games\umamusume_custom\$(TargetFileName)"
-copy /y "$(TargetPath)" "C:\Users\Administrator\Umamusume\$(TargetFileName)"</Command>
+copy /y "$(TargetPath)" "C:\Users\dhl\Umamusume\$(TargetFileName)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">

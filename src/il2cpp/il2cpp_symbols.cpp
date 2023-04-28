@@ -117,16 +117,17 @@ namespace il2cpp_symbols
 	{
 		patchCount++;
 		auto assembly = il2cpp_domain_assembly_open(il2cpp_domain, assemblyName);
-	    //printf("get dll success %p\n", assembly);
+		printf("Trying to get method ptr, assembly=%s, namespace=%s, class=%s, name=%s, argc=%d\n", assemblyName, namespaze, klassName, name, argsCount);
+	    printf("get dll success %p\n", assembly);
 		auto image = il2cpp_assembly_get_image(assembly);
-		//printf("get image success %p\n", image);
+		printf("get image success %p\n", image);
 		/*auto new_klass = image_get_class(image, 51);
 		printf("new_klass=%s\n", ((Il2CppClass*)new_klass)->name);*/
 		//class_get_name(new_klass);
 		void* klass;
 		if (index != -1) {
 			klass = image_get_class(image, index);
-			//printf("index %d klassname=%s\n",index, ((Il2CppClass*)klass)->name);
+			printf("index %d klassname=%s\n",index, ((Il2CppClass*)klass)->name);
 		}
 		else {
 			klass = il2cpp_class_from_name(image, namespaze, klassName);
@@ -134,7 +135,7 @@ namespace il2cpp_symbols
 			//class_get_method(klass);
 		}
 		//class_get_method(klass);
-		//printf("get class success %p\n", klass);
+		printf("get class success %p\n", klass);
 		hookStr s = {};
 		s.assemblyName = assemblyName;
 		s.namespaceName = namespaze;
@@ -144,7 +145,9 @@ namespace il2cpp_symbols
 		s.addr = klass;
 		hooked_addr.push_back(s);
 
-		return il2cpp_class_get_method_from_name(klass, name, argsCount)->methodPointer;
+		uintptr_t ptr = il2cpp_class_get_method_from_name(klass, name, argsCount)->methodPointer;
+		printf("ret ptr=%p\n", ptr);
+		return ptr;
 	}
 
 	MethodInfo* get_method(const char* assemblyName, const char* namespaze,

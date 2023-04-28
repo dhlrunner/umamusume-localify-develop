@@ -3,6 +3,7 @@
 #define _CRT_SECURE_NO_WARNINGS 1
 #define MAX_HORSE_NUM 18
 #define IMGUI_DEFINE_MATH_OPERATORS
+#define stringify( name ) #name
 
 #include <stdinclude.hpp>
 
@@ -486,6 +487,7 @@ using namespace std;
 	{
 		auto ssql = std::wstring(sql->start_char);
 
+
 		if (ssql.find(L"text_data") != std::string::npos ||
 			ssql.find(L"character_system_text") != std::string::npos ||
 			ssql.find(L"race_jikkyo_comment") != std::string::npos ||
@@ -494,6 +496,7 @@ using namespace std;
 			text_queries.emplace(_this, true);
 		}
 
+
 		//wprintf(L"DBConnection info: Handle=%p dbPath=%s\n",conn->Handle,conn->dbPath->start_char);
 		wstring path = conn->dbPath->start_char;
 		//bool end = hasEnding(string(path.begin(), path.end()),"master.mdb");
@@ -501,6 +504,12 @@ using namespace std;
 			masterDBconnection = conn;
 			masterDB_instance = _this;
 			wprintf(L"Set masterDBConnection Handle=%p dbPath=%s\n", conn->Handle, conn->dbPath->start_char);
+
+			
+
+			
+
+
 			//if (std::filesystem::exists("firstrun.sql")) {
 			//	wstring sqlQuery = readFileIntoString("firstrun.sql");
 			//	//const wchar_t *f_sql = sqlQuery.append(ssql.c_str()).c_str();
@@ -1023,7 +1032,7 @@ using namespace std;
 	int RaceResultScene_GetMotionVariationId_hook(int charaId) {
 		printf("GetMotionVariationId : charaId=%d\n", charaId);
 		if (c_raceResultCutinMotionChara > -1) {
-			charaId = 1007;// c_raceResultCutinMotionChara;
+			charaId = c_raceResultCutinMotionChara;
 			//dress->CharaId = c_raceResultCutinMotionChara;
 		}
 		return reinterpret_cast<decltype(RaceResultScene_GetMotionVariationId_hook)*>
@@ -1038,7 +1047,7 @@ using namespace std;
 	}
 
 	void* RaceResultCutInHelper_LoadBodyMotion_orig = nullptr;
-	void* RaceResultCutInHelper_LoadBodyMotion_hook(int characterId, MasterDressData* dress, int personalityType, int rank, int grade, int raceType) {
+	void* RaceResultCutInHelper_LoadBodyMotion_hook(int characterId, MasterDressData* dress, int personalityType, int rank, int grade, int raceType, void* resultSwapData) {
 		
 		printf("RaceResultCutInHelper_LoadBodyMotion: charaId=%d,dressid=%d,rank=%d,grade=%d\n",characterId, dress->Id,rank,grade);
 		if (g_winMotion564) {
@@ -1068,12 +1077,44 @@ using namespace std;
 		
 		//return nullptr;
 		return reinterpret_cast<decltype(RaceResultCutInHelper_LoadBodyMotion_hook)*>
-			(RaceResultCutInHelper_LoadBodyMotion_orig)(characterId, dress, personalityType, rank, grade, raceType);
+			(RaceResultCutInHelper_LoadBodyMotion_orig)(characterId, dress, personalityType, rank, grade, raceType, resultSwapData);
 	}
 
 	void* RaceResultCutInHelper_LoadCameraMotion_orig = nullptr;
 	void* RaceResultCutInHelper_LoadCameraMotion_hook(int characterId, MasterDressData* dress, int personalityType, int rank, int grade, int raceType) {
-		printf("RaceResultCutInHelper_LoadCameraMotion: charaId=%d,dressid=%d,rank=%d,grade=%d\n", characterId, dress->Id, rank, grade);
+		//printf("RaceResultCutInHelper_LoadCameraMotion: charaId=%d,dressid=%d,rank=%d,grade=%d\n", characterId, dress->Id, rank, grade);
+		printf("characterId: %d\n", characterId);
+		printf("dress:\n");
+		printf("\tId: %d\n", dress->Id);
+		printf("\tConditionType: %d\n", dress->ConditionType);
+		printf("\tHaveMini: %d\n", dress->HaveMini);
+		printf("\tGeneralPurpose: %d\n", dress->GeneralPurpose);
+		printf("\tCharaId: %d\n", dress->CharaId);
+		printf("\tUseGender: %d\n", dress->UseGender);
+		printf("\tBodyType: %d\n", dress->BodyType);
+		printf("\tBodyTypeSub: %d\n", dress->BodyTypeSub);
+		printf("\tBodySetting: %d\n", dress->BodySetting);
+		printf("\tUseRace: %d\n", dress->UseRace);
+		printf("\tUseLive: %d\n", dress->UseLive);
+		printf("\tUseLiveTheater: %d\n", dress->UseLiveTheater);
+		printf("\tUseHome: %d\n", dress->UseHome);
+		printf("\tIsWet: %d\n", dress->IsWet);
+		printf("\tIsDirt: %d\n", dress->IsDirt);
+		printf("\tHeadSubId: %d\n", dress->HeadSubId);
+		printf("\tUseSeason: %d\n", dress->UseSeason);
+		printf("\tDressColorMain: %p\n", (void*)dress->DressColorMain);
+		printf("\tDressColorSub: %p\n", (void*)dress->DressColorSub);
+		printf("\tColorNum: %d\n", dress->ColorNum);
+		printf("\tDispOrder: %d\n", dress->DispOrder);
+		printf("\tTailModelId: %d\n", dress->TailModelId);
+		printf("\tTailModelSubId: %d\n", dress->TailModelSubId);
+		printf("\tStartTime: %lld\n", dress->StartTime);
+		printf("\tEndTime: %lld\n", dress->EndTime);
+		printf("\t_getCondition: %d\n", dress->_getCondition);
+		printf("personalityType: %d\n", personalityType);
+		printf("rank: %d\n", rank);
+		printf("grade: %d\n", grade);
+		printf("raceType: %d\n", raceType);
 		//return nullptr;
 		if (g_winMotion564) {
 			characterId = 1007;
@@ -1098,9 +1139,10 @@ using namespace std;
 			}
 		}
 
-		
-		return reinterpret_cast<decltype(RaceResultCutInHelper_LoadCameraMotion_hook)*>
+		void* ret = reinterpret_cast<decltype(RaceResultCutInHelper_LoadCameraMotion_hook)*>
 			(RaceResultCutInHelper_LoadCameraMotion_orig)(characterId, dress, personalityType, rank, grade, raceType);
+		printf("LoadCameraMotion ret=%p\n", ret);
+		return ret;
 	}
 
 	void* RaceResultCutInHelper_LoadEarMotion_orig = nullptr;
@@ -1183,14 +1225,14 @@ using namespace std;
 			(RaceSkillCutInHelper_PreInstantiateCharaUser_orig)(charaId, dressId, charaIndex, headId, isUseDressDataHeadModelSubId);
 	}
 
-	void* RaceSkillCutInHelper_InitForGacha_orig = nullptr;
+	/*void* RaceSkillCutInHelper_InitForGacha_orig = nullptr;
 	void RaceSkillCutInHelper_InitForGacha_hook(void* _this,void* owner) {
 		printf("RaceSkillCutInHelper_InitForGacha called\n");
 
 		return reinterpret_cast<decltype(RaceSkillCutInHelper_InitForGacha_hook)*>
 			(RaceSkillCutInHelper_InitForGacha_orig)(_this,owner);
 
-	}
+	}*/
 
 	void* Gallop_Cutin_CutinCharacter_ctor_orig = nullptr;
 	void* Gallop_Cutin_CutinCharacter_ctor_hook(void*_this, CutInCharacterCreateInfo* createInfo) {
@@ -1320,10 +1362,10 @@ using namespace std;
 	}
 
 	void* Live_Cutt_AlterUpdate_CameraLookAt_orig = nullptr;
-	void Live_Cutt_AlterUpdate_CameraLookAt_hook(void* _this, void* sheet, int currentFrame, Vector3_t* outLookAt) {
+	void Live_Cutt_AlterUpdate_CameraLookAt_hook(void* _this, void* sheet, int currentFrame, float currentTime, Vector3_t* outLookAt) {
 		if (!c_stopLiveCam) {
 			reinterpret_cast<decltype(Live_Cutt_AlterUpdate_CameraLookAt_hook)*>
-				(Live_Cutt_AlterUpdate_CameraLookAt_orig)(_this, sheet, currentFrame, outLookAt);
+				(Live_Cutt_AlterUpdate_CameraLookAt_orig)(_this, sheet, currentFrame, currentTime,outLookAt);
 		}
 		liveCam_Lookat = *outLookAt;
 		//printf("AlterUpdate_CameraLookAt x=%.2f y=%.2f z=%.2f CurrentFrame=%d\n", outLookAt->x, outLookAt->y, outLookAt->z, currentFrame);
@@ -1331,10 +1373,10 @@ using namespace std;
 	}
 
 	void* Live_Cutt_AlterUpdate_CameraPos_orig = nullptr;
-	void Live_Cutt_AlterUpdate_CameraPos_hook(void* _this, void* sheet, int currentFrame, int sheetIndex, bool isUseCameraMotion) {
+	void Live_Cutt_AlterUpdate_CameraPos_hook(void* _this, void* sheet, int currentFrame, float currentTime, int sheetIndex, bool isUseCameraMotion) {
 		if (!c_stopLiveCam) {
 			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_CameraPos_hook)*>
-				(Live_Cutt_AlterUpdate_CameraPos_orig)(_this, sheet, currentFrame, sheetIndex, isUseCameraMotion);
+				(Live_Cutt_AlterUpdate_CameraPos_orig)(_this, sheet, currentFrame, currentTime, sheetIndex, isUseCameraMotion);
 		}
 		//printf("AlterUpdate_CameraPos sheetIndex=%d, CurrentFrame=%d\n",sheetIndex, currentFrame);
 		
@@ -1390,12 +1432,12 @@ using namespace std;
 			(Live_Cutt_AlterUpdate_CameraRoll_orig)(_this, sheet,currentFrame);
 	}
 
-	void* Live_Cutt_AlterUpdate_MultiCamera_orig = nullptr;
+	/*void* Live_Cutt_AlterUpdate_MultiCamera_orig = nullptr;
 	void Live_Cutt_AlterUpdate_MultiCamera_hook(void* _this, void* sheet, int currentFrame) {
 		printf("AlterUpdate_MultiCamera CurrentFrame=%d \n", currentFrame);
 		return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_MultiCamera_hook)*>
 			(Live_Cutt_AlterUpdate_MultiCamera_orig)(_this, sheet,currentFrame);
-	}
+	}*/
 
 	void* Live_Cutt_AlterUpdate_CameraFov_orig = nullptr;
 	void Live_Cutt_AlterUpdate_CameraFov_hook(void* _this, void* sheet, int currentFrame) {
@@ -1424,21 +1466,21 @@ using namespace std;
 	}
 
 	void* Live_Cutt_AlterUpdate_EyeCameraLookAt_orig = nullptr;
-	void Live_Cutt_AlterUpdate_EyeCameraLookAt_hook(void* _this, void* sheet, int currentFrame) {
+	void Live_Cutt_AlterUpdate_EyeCameraLookAt_hook(void* _this, void* sheet, int currentFrame, float currentTime) {
 		//printf("AlterUpdate_EyeCameraLookAt CurrentFrame=%d \n", currentFrame);
 		if (!c_stopLiveCam) {
 			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_EyeCameraLookAt_hook)*>
-				(Live_Cutt_AlterUpdate_EyeCameraLookAt_orig)(_this, sheet, currentFrame);
+				(Live_Cutt_AlterUpdate_EyeCameraLookAt_orig)(_this, sheet, currentFrame, currentTime);
 		}
 		
 	}
 
 	void* Live_Cutt_AlterUpdate_EyeCameraPosition_orig = nullptr;
-	void Live_Cutt_AlterUpdate_EyeCameraPosition_hook(void* _this, void* sheet, int currentFrame) {
+	void Live_Cutt_AlterUpdate_EyeCameraPosition_hook(void* _this, void* sheet, int currentFrame, float currentTime) {
 		//printf("AlterUpdate_EyeCameraLookAt CurrentFrame=%d \n", currentFrame);
 		if (!c_stopLiveCam) {
 			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_EyeCameraPosition_hook)*>
-				(Live_Cutt_AlterUpdate_EyeCameraPosition_orig)(_this, sheet, currentFrame);
+				(Live_Cutt_AlterUpdate_EyeCameraPosition_orig)(_this, sheet, currentFrame,currentTime);
 		}
 		
 	}
@@ -1453,20 +1495,20 @@ using namespace std;
 	}
 
 	void* Live_Cutt_AlterUpdate_MultiCameraLookAt_orig = nullptr;
-	void Live_Cutt_AlterUpdate_MultiCameraLookAt_hook(void* _this, void* sheet, int currentFrame) {
+	void Live_Cutt_AlterUpdate_MultiCameraLookAt_hook(void* _this, void* sheet, int currentFrame, float currentTime) {
 		//printf("AlterUpdate_MultiCameraLookAt currentFrame=%d \n", currentFrame);
 		if (!c_stopLiveCam) {
 			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_MultiCameraLookAt_hook)*>
-				(Live_Cutt_AlterUpdate_MultiCameraLookAt_orig)(_this, sheet,currentFrame);
+				(Live_Cutt_AlterUpdate_MultiCameraLookAt_orig)(_this, sheet,currentFrame, currentTime);
 		}
 	}
 
 	void* Live_Cutt_AlterUpdate_MultiCameraPosition_orig = nullptr;
-	void Live_Cutt_AlterUpdate_MultiCameraPosition_hook(void* _this, void* sheet, int currentFrame) {
+	void Live_Cutt_AlterUpdate_MultiCameraPosition_hook(void* _this, void* sheet, int currentFrame, float currentTime) {
 		//printf("AlterUpdate_MultiCameraPosition currentFrame=%d \n", currentFrame);
 		if (!c_stopLiveCam) {
 			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_MultiCameraPosition_hook)*>
-				(Live_Cutt_AlterUpdate_MultiCameraPosition_orig)(_this, sheet, currentFrame);
+				(Live_Cutt_AlterUpdate_MultiCameraPosition_orig)(_this, sheet, currentFrame, currentTime);
 		}
 	}
 
@@ -2097,21 +2139,24 @@ using namespace std;
 		//printf("Data is %p \n", _this->_selectCharaId);
 		//printf("Data is %p \n", _this->_selectClothId);
 		//printf("Data is %p \n", _this->_selectHeadId);
+		printf("_this->_data->_chara->_selectCharaId=%d\n", _this->_data->_chara->_selectCharaId);
+		printf("_charaIndex %d\n", _this->_charaIndex);
+		printf("CharacterPartsNum %d\n", _this->_data->CharacterPartsNum);
+		printf("CharacterSpringCollisionNum %d\n", _this->_data->CharacterSpringCollisionNum);
+		printf("CharacterWindNum %d\n", _this->_data->CharacterWindNum);
+		printf("_characterCollisionNum %d\n", _this->_data->_characterCollisionNum);
+		printf("_characterIKNum %d\n", _this->_data->_characterIKNum);
 
-		//printf("_charaIndex %d\n", _this->_charaIndex);
-		//printf("CharacterPartsNum %d\n", _this->_data->CharacterPartsNum);
-		//printf("CharacterSpringCollisionNum %d\n", _this->_data->CharacterSpringCollisionNum);
-		//printf("CharacterWindNum %d\n", _this->_data->CharacterWindNum);
-		//printf("_characterCollisionNum %d\n", _this->_data->_characterCollisionNum);
-		//printf("_characterIKNum %d\n", _this->_data->_characterIKNum);
-
+		_this->_data->_chara->_selectCharaId = c_gachaCutinChara;
+		_this->_data->_chara->_selectClothId = c_gachaCutinDress;
+		_this->_data->_chara->_selectHeadId = c_gachaCutinHeadid;
 		_this->_data->_characterKeys->_selectCharaId = c_gachaCutinChara;
 		_this->_data->_characterKeys->_selectClothId = c_gachaCutinDress;
 		_this->_data->_characterKeys->_selectHeadId = c_gachaCutinHeadid;
 		_this->_selectCharaId = c_gachaCutinChara;
 		_this->_selectClothId = c_gachaCutinDress;
 		_this->_selectHeadId = c_gachaCutinHeadid;
-		_this->_data->CharacterWindNum = 0;
+		//_this->_data->CharacterWindNum = 0;
 		
 
 		reinterpret_cast<decltype(chara_hook)*>(chara_orig)(_this, currentFrame);
@@ -2293,16 +2338,16 @@ using namespace std;
 
 	//Graphics
 
-	void* set_vsync_count_orig = nullptr;
+	/*void* set_vsync_count_orig = nullptr;
 	void set_vsync_count_hook(int value) {
 		printf("setVsyncCount: %d -> %d\n", value, g_vsync_count);
 		return reinterpret_cast<decltype(set_vsync_count_hook)*>(set_vsync_count_orig)(g_vsync_count == -1 ? value : g_vsync_count);
-	}
+	}*/
 
 	void* set_antialiasing_orig = nullptr;
 	void set_antialiasing_hook(int value) {
 		printf("setAntialiasing: %d -> %d\n", value, g_antialiasing);
-		set_vsync_count_hook(1);
+		//set_vsync_count_hook(1);
 		return reinterpret_cast<decltype(set_antialiasing_hook)*>(set_antialiasing_orig)(!g_highquality ? value : g_antialiasing);
 	}
 
@@ -2395,7 +2440,7 @@ using namespace std;
 		if (c_raceResultCutinMotionRank > -1) {
 			rank = c_raceResultCutinMotionRank;
 		}
-		printf("GetRaceResultCuttPath charaid=%d, subid=%d, cardid=%d,rank=%d, grade=%d, raceType=%d\n");
+		printf("GetRaceResultCuttPath charaid=%d, subid=%d, cardid=%d,rank=%d, grade=%d, raceType=%d\n",charaId,subId,cardId,rank,grade,raceType);
 		return reinterpret_cast<decltype(ResourcePath_GetRaceResultCuttPath_hook)*>(ResourcePath_GetRaceResultCuttPath_orig)(charaId,subId,cardId,rank,grade,raceType);
 	}
 
@@ -2410,6 +2455,72 @@ using namespace std;
 			printf("RaceUIFinishOrderFlash_Play ignored\n");
 		}
 			
+	}
+
+	void* Gallop_CutInModelController_CreateModel_orig = nullptr;
+	void* Gallop_CutInModelController_CreateModel_hook(CutInModelController_Context* context) {
+		printf("Called Gallop_CutInModelController_CreateModel\n");
+		printf("charid=%d\n", context->CharaId);
+		printf("cardid=%d\n", context->CardId);
+		printf("DressID=%d\n", context->DressId);
+		printf("Controllertype=%d\n", context->ControllerType);
+		printf("overrideClothCategory=%d\n", context->_overrideClothCategory);
+		//context->_overrideClothCategory = CySpringDataContainer::Category::Training;
+		if (c_changeStoryChar) {
+			if ((c_story3dCharID < 0) || (c_story3dClothID < 0) || (c_story3dHeadID < 0))
+			{
+				std::string line;
+				while (true) {
+					try {
+
+
+						std::cout << "Enter charaid, clothid, headid, cardid" << line << "\n";
+
+						std::getline(std::cin, line);
+
+						//std::cout <<  "Entered: " << line;
+						std::vector < std::string > arg = explode(line, ' ');
+
+
+						int _charaId = std::stoi(arg.at(0).c_str());
+						int _dressId = std::stoi(arg.at(1).c_str());
+						int _headid = std::stoi(arg.at(2).c_str());
+						int _cardid = std::stoi(arg.at(3).c_str());
+
+						context->CharaId = _charaId;
+						context->DressId = _dressId;
+						context->HeadId = _headid;
+						context->CardId = _cardid;
+
+						printf("CutInModelController.Context set manual %d %d %d %d\n", context->CharaId, context->DressId, context->HeadId,context->CardId);
+						break;
+					}
+					catch (std::invalid_argument&) {
+						printf("Value Error: please enter number only\n");
+					}
+					catch (std::out_of_range&) {
+						std::cout << "You entered " << line << "\n";
+						printf_s("Argument Error: please enter {CharID} {Dress id} {Head ID} {Card id}\n");
+					}
+				}
+
+
+
+				//printf("Enter charaid, clothid, headid, mobid: ");
+
+				//scanf_s("%d %d %d %d", &charaId, &clothId, &headId, &mobId);
+				printf("\n");
+			}
+			else
+			{
+				context->CharaId = c_story3dCharID;
+				context->DressId = c_story3dClothID;
+				context->HeadId = c_story3dHeadID;
+				printf("CutInModelController.Context set %d %d %d\n", context->CharaId, context->DressId, context->HeadId);
+			}
+		}
+		//context->CharaId = 9004;
+		return reinterpret_cast<decltype(Gallop_CutInModelController_CreateModel_hook)*>(Gallop_CutInModelController_CreateModel_orig)(context);
 	}
 
 	/*void* unity_font_ctor_orig = nullptr;
@@ -2449,6 +2560,7 @@ using namespace std;
 		auto il2cpp_module = GetModuleHandle(L"GameAssembly.dll");
 
 		// load il2cpp exported functions
+		printf("Il2cpp Init\n");
 		il2cpp_symbols::init(il2cpp_module);
 
 #pragma region HOOK_MACRO
@@ -2740,11 +2852,11 @@ using namespace std;
 				"RaceUI", "SetVisibleRank", 1
 			));
 
-		auto RaceUIRank_Setup_addr = reinterpret_cast<void(*)(void*,int,int,void*,void*,int,float,float)>(
+		/*auto RaceUIRank_Setup_addr = reinterpret_cast<void(*)(void*,int,int,void*,void*,int,float,float)>(
 			il2cpp_symbols::get_method_pointer(
 				"umamusume.dll", "Gallop",
 				"RaceUIRank", "Setup", 7
-			));
+			));*/
 
 		auto RaceUIRank_PlayPlayerRankDown_addr = reinterpret_cast<void(*)(void*)>(
 			il2cpp_symbols::get_method_pointer(
@@ -2812,9 +2924,9 @@ using namespace std;
 				"ObscuredInt", "op_Implicit", 1
 			));
 
-		auto load_scene_internal_addr = il2cpp_resolve_icall("UnityEngine.SceneManagement.SceneManager::LoadSceneAsyncNameIndexInternal_Injected(System.String,System.Int32,UnityEngine.SceneManagement.LoadSceneParameters&,System.Boolean)");
+		//auto load_scene_internal_addr = il2cpp_resolve_icall("UnityEngine.SceneManagement.SceneManager::LoadSceneAsyncNameIndexInternal_Injected(System.String,System.Int32,UnityEngine.SceneManagement.LoadSceneParameters&,System.Boolean)");
 
-		printf("icall %p\n", load_scene_internal_addr);
+		//printf("icall %p\n", load_scene_internal_addr);
 
 		auto Cute_Http_WWWRequest_Post_addr = il2cpp_symbols::get_method_pointer(
 			"Cute.Http.Assembly.dll", "Cute.Http",
@@ -2832,20 +2944,20 @@ using namespace std;
 			"RaceResultScene", "PlayFinishOrderAnim", 1
 		);
 
-		auto RaceResultCutInHelper_LoadBodyMotion_addr = reinterpret_cast<void*(*)(int,MasterDressData*,int,int,int,int)>(
+		/*auto RaceResultCutInHelper_LoadBodyMotion_addr = reinterpret_cast<void*(*)(int,MasterDressData*,int,int,int,int)>(
 			il2cpp_symbols::get_method_pointer(
 				"umamusume.dll", "Gallop",
-				"RaceResultCutInHelper", "LoadBodyMotion", 6
+				"RaceResultCutInHelper", "LoadBodyMotion", 7
 			)
-		);
+		);*/
 
 
-		auto RaceResultCutInHelper_LoadCameraMotion_addr = reinterpret_cast<void* (*)(int, MasterDressData*, int, int, int, int)>(
+		/*auto RaceResultCutInHelper_LoadCameraMotion_addr = reinterpret_cast<void* (*)(int, MasterDressData*, int, int, int, int)>(
 			il2cpp_symbols::get_method_pointer(
 				"umamusume.dll", "Gallop",
 				"RaceResultCutInHelper", "LoadCameraMotion", 6
 			)
-		);
+		);*/
 
 		auto RaceResultCutInHelper_LoadEarMotion_addr = reinterpret_cast<void* (*)(int, MasterDressData*, int, int, int, int)>(
 			il2cpp_symbols::get_method_pointer(
@@ -2873,10 +2985,10 @@ using namespace std;
 			"RaceSkillCutInHelper", "PreInstantiateCharaUser", 6
 		);
 
-		auto RaceSkillCutInHelper_InitForGacha_addr = il2cpp_symbols::get_method_pointer(
+		/*auto RaceSkillCutInHelper_InitForGacha_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop",
 			"RaceSkillCutInHelper", "InitForGacha", 1
-		);
+		);*/
 
 		auto Gallop_Cutin_CutinCharacter_ctor_addr = reinterpret_cast<void(*)(void*, CutInCharacterCreateInfo*) > (
 			il2cpp_symbols::get_method_pointer(
@@ -2950,12 +3062,12 @@ using namespace std;
 
 		auto Live_Cutt_AlterUpdate_CameraLookAt_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop.Live.Cutt",
-			"LiveTimelineControl", "AlterUpdate_CameraLookAt", 3
+			"LiveTimelineControl", "AlterUpdate_CameraLookAt", 4
 		);
 
 		auto Live_Cutt_AlterUpdate_CameraPos_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop.Live.Cutt",
-			"LiveTimelineControl", "AlterUpdate_CameraPos", 4
+			"LiveTimelineControl", "AlterUpdate_CameraPos", 5
 		);
 
 		auto Live_Cutt_AlterUpdate_CameraSwitcher_addr = il2cpp_symbols::get_method_pointer(
@@ -2983,19 +3095,19 @@ using namespace std;
 			"LiveTimelineControl", "AlterUpdate_MultiCameraSwitcher", 6
 		);
 
-		auto Live_Cutt_AlterUpdate_MultiCamera_addr = il2cpp_symbols::get_method_pointer(
+		/*auto Live_Cutt_AlterUpdate_MultiCamera_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop.Live.Cutt",
 			"LiveTimelineControl", "AlterUpdate_MultiCamera", 2
-		);
+		);*/
 
 		auto Live_Cutt_AlterUpdate_EyeCameraPosition_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop.Live.Cutt",
-			"LiveTimelineControl", "AlterUpdate_EyeCameraPosition", 2
+			"LiveTimelineControl", "AlterUpdate_EyeCameraPosition", 3
 		);
 
 		auto Live_Cutt_AlterUpdate_EyeCameraLookAt_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop.Live.Cutt",
-			"LiveTimelineControl", "AlterUpdate_EyeCameraLookAt", 2
+			"LiveTimelineControl", "AlterUpdate_EyeCameraLookAt", 3
 		);
 
 		auto Live_Cutt_AlterLateUpdate_CameraMotion_addr = reinterpret_cast<bool(*)(void*, void*, int)> (
@@ -3011,12 +3123,12 @@ using namespace std;
 		);
 		auto Live_Cutt_AlterUpdate_MultiCameraLookAt_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop.Live.Cutt",
-			"LiveTimelineControl", "AlterUpdate_MultiCameraLookAt", 2
+			"LiveTimelineControl", "AlterUpdate_MultiCameraLookAt", 3
 		);
 
 		auto Live_Cutt_AlterUpdate_MultiCameraPosition_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop.Live.Cutt",
-			"LiveTimelineControl", "AlterUpdate_MultiCameraPosition", 2
+			"LiveTimelineControl", "AlterUpdate_MultiCameraPosition", 3
 		);
 
 		auto Live_Cutt_AlterUpdate_MultiCameraTiltShift_addr = il2cpp_symbols::get_method_pointer(
@@ -3183,30 +3295,40 @@ using namespace std;
 		MH_CreateHook((LPVOID)user_addr, user_hook, &user_orig);
 		MH_EnableHook((LPVOID)user_addr);*/
 
-		auto chara_addr = il2cpp_symbols::get_method_pointer(
+		/*auto chara_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop.CutIn.Cutt",
 			"TimelineCharacter", "CreateCharacterModel", 1
-		);
+		);*/
 
 		//printf("chara_addr at %p\n", chara_addr);
 
-		//MH_CreateHook((LPVOID)chara_addr, chara_hook, &chara_orig);
-		//MH_EnableHook((LPVOID)chara_addr);
+		/*MH_CreateHook((LPVOID)chara_addr, chara_hook, &chara_orig);
+		MH_EnableHook((LPVOID)chara_addr);*/
 
 		auto CutInCharacter_GenerateCutInModelControllerContext_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop.CutIn",
 			"CutInCharacter", "GenerateCutInModelControllerContext", 9 
 		); 
 
-		//MH_CreateHook((LPVOID)CutInCharacter_GenerateCutInModelControllerContext_addr, CutInCharacter_GenerateCutInModelControllerContext_hook, &CutInCharacter_GenerateCutInModelControllerContext_orig);
-		//MH_EnableHook((LPVOID)CutInCharacter_GenerateCutInModelControllerContext_addr);
+		MH_CreateHook((LPVOID)CutInCharacter_GenerateCutInModelControllerContext_addr, CutInCharacter_GenerateCutInModelControllerContext_hook, &CutInCharacter_GenerateCutInModelControllerContext_orig);
+		MH_EnableHook((LPVOID)CutInCharacter_GenerateCutInModelControllerContext_addr);
 
 		auto CutInCharacter_CreateModel_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop.CutIn",
 			"CutInCharacter", "CreateModel", 2
 		);
-		//MH_CreateHook((LPVOID)CutInCharacter_CreateModel_addr, CutInCharacter_CreateModel_hook, &CutInCharacter_CreateModel_orig);
-		//MH_EnableHook((LPVOID)CutInCharacter_CreateModel_addr);
+		MH_CreateHook((LPVOID)CutInCharacter_CreateModel_addr, CutInCharacter_CreateModel_hook, &CutInCharacter_CreateModel_orig);
+		MH_EnableHook((LPVOID)CutInCharacter_CreateModel_addr);
+
+		auto Gallop_CutInModelController_CreateModel_addr = reinterpret_cast<void*(*)(CutInModelController_Context*)>(
+			il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"CutInModelController", "CreateModel", 1
+			)
+			);
+		MH_CreateHook((LPVOID)Gallop_CutInModelController_CreateModel_addr, Gallop_CutInModelController_CreateModel_hook, &Gallop_CutInModelController_CreateModel_orig);
+		MH_EnableHook((LPVOID)Gallop_CutInModelController_CreateModel_addr);
+
 
 		auto RaceSkillCutInHelper_class = il2cpp_symbols::get_class("umamusume.dll", "Gallop", "RaceSkillCutInHelper");
 		auto RaceSkillCutInHelper_Owner_class = il2cpp_symbols::find_nested_class_from_name(RaceSkillCutInHelper_class, "Owner");
@@ -3228,10 +3350,10 @@ using namespace std;
 			"LiveTimelineKeyCameraPositionData", "GetValue", 2
 		);
 
-		auto alterupdate_camera_lookat_addr = il2cpp_symbols::get_method_pointer(
+		/*auto alterupdate_camera_lookat_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop.Live.Cutt",
 			"LiveTimelineControl", "AlterUpdate_CameraLookAt", 3
-		);
+		);*/
 
 		auto ChangeScreenOrientation_addr = reinterpret_cast<void (*)(
 			ScreenOrientation, bool)>(il2cpp_symbols::get_method_pointer(
@@ -3307,10 +3429,10 @@ using namespace std;
 			"umamusume.dll", "Gallop",
 			"GraphicSettings", "ApplyGraphicsQuality", 2);
 
-		auto set_vsync_count_addr = il2cpp_symbols::get_method_pointer(
+		/*auto set_vsync_count_addr = il2cpp_symbols::get_method_pointer(
 			"UnityEngine.CoreModule.dll", "UnityEngine",
 			"QualitySettings", "set_vSyncCount", 1
-		);
+		);*/
 		auto set_RenderTextureAntiAliasing_addr = il2cpp_symbols::get_method_pointer(
 			"UnityEngine.CoreModule.dll", "UnityEngine",
 			"RenderTexture", "set_antiAliasing", 1
@@ -3340,14 +3462,14 @@ using namespace std;
 			ResourcePath_GetRaceResultCuttPath_hook, &ResourcePath_GetRaceResultCuttPath_orig);
 		MH_EnableHook((LPVOID)ResourcePath_GetRaceResultCuttPath_addr);
 
-		auto RaceUIFinishOrderFlash_Play_addr = il2cpp_symbols::get_method_pointer(
+		/*auto RaceUIFinishOrderFlash_Play_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop",
 			"RaceUIFinishOrderFlash", "Play", 1
 		);
 		
 		MH_CreateHook((LPVOID)RaceUIFinishOrderFlash_Play_addr,
 			RaceUIFinishOrderFlash_Play_hook, &RaceUIFinishOrderFlash_Play_orig);
-		MH_EnableHook((LPVOID)RaceUIFinishOrderFlash_Play_addr);
+		MH_EnableHook((LPVOID)RaceUIFinishOrderFlash_Play_addr);*/
 
 		/*auto LiveModelController_UpdateEyeReflectionController_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll",
@@ -3449,7 +3571,7 @@ using namespace std;
 		//ADD_HOOK(Unity_Post, "Unity_Post at %p\n");
 		ADD_HOOK(RaceUI_SetRaceUIActive, "RaceUI.SetRaceUIActive(bool) at %p\n");
 		ADD_HOOK(RaceUI_SetVisibleRank, "RaceUI.SetVisibleRank(bool) at %p\n");
-		ADD_HOOK(RaceUIRank_Setup, "RaceUIRank.Setup(7) at %p\n");
+		//ADD_HOOK(RaceUIRank_Setup, "RaceUIRank.Setup(7) at %p\n");
 		ADD_HOOK(RaceUIRank_PlayPlayerRankUp, "RaceUIRank.PlayPlayerRankUp() at %p\n");
 		ADD_HOOK(RaceUIRank_PlayPlayerRankDown, "RaceUIRank.PlayPlayerRankDown() at %p\n");
 		ADD_HOOK(RaceManager_GetHorseDistanceByIndex, "RaceManager.GetHorseDistanceByIndex(int) at %p\n");
@@ -3457,8 +3579,8 @@ using namespace std;
 		ADD_HOOK(LiveTheaterInfo_UpdateCharaDressIds, "LiveTheaterInfo_UpdateCharaDressIds(LiveTheaterMemberInfo[]) at %p\n");
 		ADD_HOOK(LiveTheaterInfo_CheckDress, "LiveTheaterInfo_CheckDress(int,CharaDressIdSet) at %p\n");
 		ADD_HOOK(RaceResultScene_GetMotionVariationId, "RaceResultScene_GetMotionVariationId(int) at %p\n");
-		ADD_HOOK(RaceResultCutInHelper_LoadBodyMotion, "RaceResultCutInHelper_LoadBodyMotion(...5) at %p\n");
-		ADD_HOOK(RaceResultCutInHelper_LoadCameraMotion, "RaceResultCutInHelper_LoadCameraMotion(...5) at %p\n");
+		//ADD_HOOK(RaceResultCutInHelper_LoadBodyMotion, "RaceResultCutInHelper_LoadBodyMotion(...7) at %p\n");
+		//ADD_HOOK(RaceResultCutInHelper_LoadCameraMotion, "RaceResultCutInHelper_LoadCameraMotion(...5) at %p\n");
 		ADD_HOOK(RaceResultCutInHelper_LoadEarMotion, "RaceResultCutInHelper_LoadEarMotion(...5) at %p\n");
 		ADD_HOOK(RaceResultCutInHelper_LoadFacialMotion, "RaceResultCutInHelper_LoadFacialMotion(...5) at %p\n");
 		ADD_HOOK(ResourcePath_GetCharacterRaceResultMotionPath,"ResourcePath_GetCharacterRaceResultMotionPath at %p\n")
@@ -3466,7 +3588,7 @@ using namespace std;
 		//ADD_HOOK(RaceResultCutInHelper_GetModelController, "RaceResultCutInHelper_GetModelController(..) at %p");
 		//ADD_HOOK(RaceResultCutInHelper_GetResultCuttCueId, "RaceResultCutInHelper_GetResultCuttCueId(int,int,int*) at %p");
 		ADD_HOOK(RaceSkillCutInHelper_PreInstantiateCharaUser, "RaceSkillCutInHelper_PreInstantiateCharaFixed at %p\n");
-		ADD_HOOK(RaceSkillCutInHelper_InitForGacha, "RaceSkillCutInHelper_InitForGacha at %p\n");
+		//ADD_HOOK(RaceSkillCutInHelper_InitForGacha, "RaceSkillCutInHelper_InitForGacha at %p\n");
 		ADD_HOOK(Gallop_Cutin_CutinCharacter_ctor, "Gallop_Cutin_CutinCharacter_.ctor at %p\n");
 		ADD_HOOK(set_virt, "set_virt at %p\n");
 		printf("CustomHost:%s\n",g_customHost);	
@@ -3496,7 +3618,7 @@ using namespace std;
 		ADD_HOOK(Live_Cutt_AlterUpdate_CameraRoll, "Live_Cutt_AlterUpdate_CameraRoll at %p\n");
 		//ADD_HOOK(Live_Cutt_AlterUpdate_MultiCameraSwitcher, "Live_Cutt_AlterUpdate_MultiCameraSwitcher at %p\n");
 		//ADD_HOOK(Live_Cutt_AlterUpdate_MultiCamera, "Live_Cutt_AlterUpdate_MultiCamera at %p\n");
-		ADD_HOOK(Live_Cutt_AlterUpdate_MultiCameraLookAt, "Live_Cutt_AlterUpdate_MultiCameraLookAt at %p\n");
+		//ADD_HOOK(Live_Cutt_AlterUpdate_MultiCameraLookAt, "Live_Cutt_AlterUpdate_MultiCameraLookAt at %p\n");
 		ADD_HOOK(Live_Cutt_AlterUpdate_MultiCameraPosition, "Live_Cutt_AlterUpdate_MultiCameraPosition at %p\n");
 		ADD_HOOK(Live_Cutt_AlterUpdate_MultiCameraTiltShift, "Live_Cutt_AlterUpdate_MultiCameraTiltShift at %p\n");
 		ADD_HOOK(Live_Cutt_AlterUpdate_PostEffect_DOF, "Live_Cutt_AlterUpdate_PostEffect_DOF at %p\n");
@@ -3534,14 +3656,14 @@ using namespace std;
 
 		ADD_HOOK(set_antialiasing, "UnityEngine.CoreModule.QualitySettings.set_antiAliasing at %p\n");
 		ADD_HOOK(graphics_quality, "Gallop.GraphicSettings.ApplyGraphicsQuality at %p\n");
-		ADD_HOOK(set_vsync_count, "UnityEngine.CoreModule.QualitySettings.set_vSyncCount at %p\n");
+		//ADD_HOOK(set_vsync_count, "UnityEngine.CoreModule.QualitySettings.set_vSyncCount at %p\n");
 		ADD_HOOK(set_RenderTextureAntiAliasing, "set_RenderTextureAntiAliasing at %p\n");
 		ADD_HOOK(Get3DAntiAliasingLevel, "Get3DAntiAliasingLevel at %p\n");
 		ADD_HOOK(change_resize_ui_for_pc, "change_resize_ui_for_pc at %p\n");
 		ADD_HOOK(ProcessMouseEvent, "ProcessMouseEvent at %p\n");
 		//ADD_HOOK(BootSystem_Awake, "BootSystem_Awake at %p\n");
 		ADD_HOOK(Gallop_SceneManager_LoadScene, "Gallop_SceneManager_LoadScene at %p\n");
-		set_vsync_count_hook(1);
+		//set_vsync_count_hook(1);
 
 
 
@@ -4554,7 +4676,19 @@ int imguiwindow()
 					ImGui::Text("MasterDBConnection ptr: nullptr");
 					//ImGui::Text("MasterDBPath: nullptr");
 				}
-
+				//if (ImGui::Button("SQLTest")) {
+				//	Il2CppObject* dbQuery = il2cpp_object_new((Il2CppClass*)il2cpp_symbols::get_class("LibNative.Runtime.dll", "LibNative.Sqlite3", "Query"));
+				//	auto query = reinterpret_cast<void (*)(Il2CppObject * _instance, Connection * conn, Il2CppString * querystr)>(il2cpp_symbols::get_method_pointer("LibNative.Runtime.dll", "LibNative.Sqlite3", "Query", "_Setup", 2));
+				//	auto query_exec = reinterpret_cast<bool (*)(Il2CppObject * _instance)>(il2cpp_symbols::get_method_pointer("LibNative.Runtime.dll", "LibNative.Sqlite3", "Query", "Exec", 0));
+				//	printf("query_exec ok\n");
+				//	//auto query_GetText = reinterpret_cast<Il2CppString * (*)(Il2CppObject * _instance, int idx)>(il2cpp_symbols::get_method_pointer("LibNative.Runtime.dll", "LibNative.Sqlite3", "Query", "GetText", 1));
+				//	query(dbQuery, masterDBconnection, il2cpp_string_new("update text_data set `text`=\"EditTest\" where id=6 and category=6 and `index`=1001;"));
+				//	bool r = query_exec(dbQuery);
+				//	//printf("Excuting %s\n", );
+				//	printf("Exec = %d\n", r);
+				//	//Il2CppString* q_res = query_GetText(dbQuery, 2);
+				//	//wprintf(L"GetText = %s\n", q_res->start_char);
+				//}
 				ImGui::Text("Livecam1 x=% 04.3f, y=% 04.3f, z=% 04.3f", liveCam_pos1.x, liveCam_pos1.y, liveCam_pos1.z);
 
 				//if (liveCam_Lookat != NULL) {

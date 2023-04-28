@@ -1,5 +1,7 @@
 #pragma once
 
+struct TimelineCharacter;
+
 enum class KeyCode {
 	None = 0,
 	Backspace = 8,
@@ -341,6 +343,72 @@ enum class ScreenOrientation {
 	AutoRotation,
 	Landscape = 3
 };
+
+//Gallop.ModelLoader.ZekkenColor
+enum class ZekkenColor {
+	DeepBlue,
+	DeepRed,
+	DeepGreen,
+	Black,
+	White,
+	Count,
+	Default = 3
+};
+
+//Gallop.ModelLoader.ZekkenFontColor
+enum class ZekkenFontColor
+{
+	Black,
+	White,
+	Yellow,
+	Count,
+	Default = 1
+};
+
+//Gallop.ModelLoader.ControllerType
+enum class ControllerType
+{
+	Default,
+	Race,
+	Training,
+	EventTimeline,
+	Live,
+	HomeStand,
+	HomeTalk,
+	HomeWalk,
+	CutIn,
+	TrainingTop,
+	SingleRace,
+	Simple,
+	Mini,
+	Paddock,
+	Champions
+};
+
+//Gallop.ModelLoader.TrackSuitColor
+enum class TrackSuitColor
+{
+	White,
+	Black,
+	Red,
+	Blue,
+	Yellow,
+	Green,
+	Orange,
+	Peach
+};
+
+//Gallop.CySpringDataContainer.Category
+namespace CySpringDataContainer {
+	enum class Category {
+		Invalid = -1,
+		Live,
+		Race,
+		Story,
+		Home,
+		Training
+	};
+}
 
 // UnityEngine.Color
 struct Color_t
@@ -1010,8 +1078,8 @@ struct TimelineCharacterGroupData
 {
 	LPVOID unknown1; //0x00
 	LPVOID unknown2; //0x08
-	LPVOID _types; // 0x10
-	LPVOID _chara; // 0x18
+	int* _types; // 0x10
+	TimelineCharacter* _chara; // 0x18
 	int _characterColorNum; // 0x20
 	int CharacterWindNum; // 0x24
 	int _characterShadowNum; // 0x28
@@ -1078,6 +1146,22 @@ struct LiveModelController_EyeReflectionContext {
 	int CullingMask;
 	float Power;
 	void* MaskTexture;
+};
+
+struct CutInModelController_Context {
+	int CardId;
+	int CharaId;
+	int DressId;
+	int HeadId;
+	int ZekkenNo;
+	ZekkenColor ZekkenColor;
+	ZekkenFontColor ZekkenFontColor;
+	TrackSuitColor FrameColor;
+	ControllerType ControllerType;
+	bool IsWet;
+	bool IsDirt;
+	CySpringDataContainer::Category  _overrideClothCategory;
+	bool IsUseDressDataHeadModelSubId;
 };
 
 // function types
