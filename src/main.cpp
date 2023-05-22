@@ -1624,7 +1624,7 @@ void InitImGui()
 	bool ret = LoadTextureFromMemory(야떼미로, sizeof(야떼미로) / sizeof(야떼미로[0]), &texture_kimura, &kimura_image_width, &kimura_image_height);
 	IM_ASSERT(ret);
 
-	
+	ImGui::MergeIconsWithLatestFont(16.f, false);
 	//imguiwindow();
 }
 

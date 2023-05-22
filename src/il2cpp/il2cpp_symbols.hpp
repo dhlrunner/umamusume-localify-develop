@@ -1164,6 +1164,18 @@ struct CutInModelController_Context {
 	bool IsUseDressDataHeadModelSubId;
 };
 
+struct LiveTimelineWorkSheet {
+	Il2CppString** sVersionList;
+	Il2CppString* version;
+	int targetCameraIndex;
+	bool enableAtRuntime;
+	bool enableAtEdit;
+	float TotalTimeLength;
+	bool Lyrics;
+	int SheetType;
+
+};
+
 // function types
 typedef Il2CppString* (*il2cpp_string_new_utf16_t)(const wchar_t* str, unsigned int len);
 typedef Il2CppString* (*il2cpp_string_new_t)(const char* str);

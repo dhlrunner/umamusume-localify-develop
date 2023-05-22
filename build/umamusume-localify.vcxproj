@@ -113,8 +113,11 @@ copy /y "$(TargetPath)" "C:\Users\dhl\Umamusume\$(TargetFileName)"</Command>
     <ClInclude Include="..\src\il2cpp\il2cpp_symbols.hpp" />
     <ClInclude Include="..\src\imgui\backends\imgui_impl_dx11.h" />
     <ClInclude Include="..\src\imgui\backends\imgui_impl_win32.h" />
+    <ClInclude Include="..\src\imgui\fa_solid_900.h" />
+    <ClInclude Include="..\src\imgui\font_awesome_5.h" />
     <ClInclude Include="..\src\imgui\imgui.h" />
     <ClInclude Include="..\src\imgui\imgui_internal.h" />
+    <ClInclude Include="..\src\imgui\imgui_notify.h" />
     <ClInclude Include="..\src\imgui\imstb_rectpack.h" />
     <ClInclude Include="..\src\imgui\imstb_textedit.h" />
     <ClInclude Include="..\src\imgui\imstb_truetype.h" />

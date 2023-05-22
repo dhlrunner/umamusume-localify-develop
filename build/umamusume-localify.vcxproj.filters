@@ -83,6 +83,15 @@
     <ClInclude Include="..\src\kiero\kiero.h">
       <Filter>kiero</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\imgui\fa_solid_900.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\imgui\font_awesome_5.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\imgui\imgui_notify.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\console.cpp" />

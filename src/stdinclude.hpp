@@ -47,8 +47,11 @@
 #include "imgui/backends/imgui_impl_win32.h"
 #include "imgui/backends/imgui_impl_dx11.h"
 #include "imgui_internal.h"
+#include "imgui/imgui_notify.h"
 
-#include <d3d11.h>
+#include "d3d11.h"
+#include <wincodec.h>
+//#include "d3dx11tex.h"
 #include <tchar.h>
 
 #include <atlconv.h>

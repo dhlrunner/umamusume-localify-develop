@@ -38,8 +38,15 @@ Vector3_t liveCam_pos1{};
 Vector3_t liveCam_pos2{};
 Url lastUrl;
 Url currentUrl;
+float liveTimeSec = 0.0;
+float liveTotalTimeSec = 0.0;
+bool isLiveTimeManual = false;
+float liveTimelineManualScale = 0.1;
+bool toastImGui = false;
+char* toastMessage;
 void startThread();
 void hook_beforeboot();
+
 //void setCustomFont();
 
 
@@ -217,6 +224,15 @@ using namespace std;
 
 				c_stopLiveCam = !c_stopLiveCam;
 				printf("LiveCam Stop %s.\n",c_stopLiveCam ? "Enabled" : "Disabled");
+				if (c_stopLiveCam) {
+					toastImGui = true;
+					toastMessage = (char*)"라이브 카메라를 정지했습니다.";
+				}
+				else {
+					toastImGui = true;
+					toastMessage = (char*)"라이브 카메라를 다시 움직입니다.";
+				}
+
 			}
 			if (ctrl) {
 				printf("LCtrl is pressed!!!!!\n");
@@ -256,8 +272,38 @@ using namespace std;
 					else if (GetKeyDown(KeyCode::End)) {
 						set_TimeScale(1.0);
 						printf("Reset Timescale to %.2f\n", get_TimeScale());
+						toastImGui = true;
+						toastMessage = (char*)"배속을 1.0으로 초기화했습니다.";
 						while (GetKey(KeyCode::PageDown));
 						break;
+					}
+					else if (GetKey(KeyCode::LeftArrow)) {
+						if (!isLiveTimeManual) {
+							isLiveTimeManual = true;
+							toastImGui = true;
+							toastMessage = (char*)"라이브 타임라인 수동 조작이 활성화 되었습니다.";
+						}
+						
+						if (liveTimeSec <= 0.0) 
+						{ 
+							liveTimeSec = 0.0; 
+						}
+						else {
+							liveTimeSec = liveTimeSec - liveTimelineManualScale;
+						}
+						
+						printf("set liveTime Second to %.4f\n", liveTimeSec);
+						Sleep(1);
+					}
+					else if (GetKey(KeyCode::RightArrow)) {
+						if (!isLiveTimeManual) {
+							isLiveTimeManual = true;
+							toastImGui = true;
+							toastMessage = (char*)"라이브 타임라인 수동 조작이 활성화 되었습니다.";
+						}
+						liveTimeSec = liveTimeSec + liveTimelineManualScale;
+						printf("set liveTime Second to %.4f\n", liveTimeSec);
+						Sleep(1);
 					}
 					ctrl = GetKey(KeyCode::LeftControl);
 				}
@@ -356,6 +402,222 @@ using namespace std;
 
 		printf("\n\n");
 	}
+
+	bool SaveFrameBufferToFile(ID3D11Device* pDevice, const std::string& filePath)
+	{
+		// 프레임 버퍼의 크기와 형식을 가져옵니다.
+		ID3D11DeviceContext* pDeviceContext;
+		pDevice->GetImmediateContext(&pDeviceContext);
+
+		ID3D11RenderTargetView* pRenderTargetView;
+		pDeviceContext->OMGetRenderTargets(1, &pRenderTargetView, nullptr);
+
+		ID3D11Resource* pResource;
+		pRenderTargetView->GetResource(&pResource);
+
+		ID3D11Texture2D* pFrameBuffer;
+		HRESULT hr = pResource->QueryInterface<ID3D11Texture2D>(&pFrameBuffer);
+		pResource->Release();
+		pRenderTargetView->Release();
+		pDeviceContext->Release();
+
+		if (FAILED(hr))
+		{
+			std::cerr << "Failed to access frame buffer" << std::endl;
+			return false;
+		}
+
+		D3D11_TEXTURE2D_DESC frameBufferDesc;
+		pFrameBuffer->GetDesc(&frameBufferDesc);
+
+		// CPU용 텍스처를 생성합니다.
+		D3D11_TEXTURE2D_DESC cpuTextureDesc;
+		cpuTextureDesc.Width = frameBufferDesc.Width;
+		cpuTextureDesc.Height = frameBufferDesc.Height;
+		cpuTextureDesc.MipLevels = 1;
+		cpuTextureDesc.ArraySize = 1;
+		cpuTextureDesc.Format = frameBufferDesc.Format;
+		cpuTextureDesc.SampleDesc.Count = 1;
+		cpuTextureDesc.SampleDesc.Quality = 0;
+		cpuTextureDesc.Usage = D3D11_USAGE_STAGING;
+		cpuTextureDesc.BindFlags = 0;
+		cpuTextureDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+		cpuTextureDesc.MiscFlags = 0;
+
+		ID3D11Texture2D* pCPUTexture;
+		hr = pDevice->CreateTexture2D(&cpuTextureDesc, nullptr, &pCPUTexture);
+		if (FAILED(hr))
+		{
+			std::cerr << "Failed to create CPU texture" << std::endl;
+			pFrameBuffer->Release();
+			return false;
+		}
+
+		// 프레임 버퍼의 내용을 CPU용 텍스처로 복사합니다.
+		pDeviceContext->CopyResource(pCPUTexture, pFrameBuffer);
+
+		// WIC 이미지 라이브러리를 초기화합니다.
+		CoInitialize(nullptr);
+		IWICImagingFactory* pWICFactory;
+		hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pWICFactory));
+		if (FAILED(hr))
+		{
+			std::cerr << "Failed to create WIC imaging factory" << std::endl;
+			pFrameBuffer->Release();
+			pCPUTexture->Release();
+			return false;
+		}
+
+		// WIC 비트맵을 생성합니다.
+		IWICBitmap* pWICBitmap;
+		hr = pWICFactory->CreateBitmapFromMemory(
+			frameBufferDesc.Width, frameBufferDesc.Height, GUID_WICPixelFormat32bppBGRA,
+			frameBufferDesc.Width * 4, frameBufferDesc.Width * frameBufferDesc.Height * 4,
+			reinterpret_cast<BYTE*>(pCPUTexture), &pWICBitmap
+		);
+		if (FAILED(hr))
+		{
+			std::cerr << "Failed to create WIC bitmap" << std::endl;
+			pFrameBuffer->Release();
+			pCPUTexture->Release();
+			pWICFactory->Release();
+			return false;
+		}
+
+		// 이미지를 BMP 형식으로 저장합니다.
+		IWICBitmapEncoder* pEncoder;
+		hr = pWICFactory->CreateEncoder(GUID_ContainerFormatBmp, nullptr, &pEncoder);
+		if (FAILED(hr))
+		{
+			std::cerr << "Failed to create WIC encoder" << std::endl;
+			pFrameBuffer->Release();
+			pCPUTexture->Release();
+			pWICBitmap->Release();
+			pWICFactory->Release();
+			return false;
+		}
+
+		std::wstring wideFilePath(filePath.begin(), filePath.end());
+		hr = pEncoder->Initialize(
+			static_cast<IStream*>(nullptr),
+			WICBitmapEncoderNoCache
+		);
+		if (FAILED(hr))
+		{
+			std::cerr << "Failed to initialize WIC encoder" << std::endl;
+			pFrameBuffer->Release();
+			pCPUTexture->Release();
+			pWICBitmap->Release();
+			pEncoder->Release();
+			pWICFactory->Release();
+			return false;
+		}
+
+		IWICBitmapFrameEncode* pFrameEncode;
+		hr = pEncoder->CreateNewFrame(&pFrameEncode, nullptr);
+		if (FAILED(hr))
+		{
+			std::cerr << "Failed to create WIC frame encode" << std::endl;
+			pFrameBuffer->Release();
+			pCPUTexture->Release();
+			pWICBitmap->Release();
+			pEncoder->Release();
+			pWICFactory->Release();
+			return false;
+		}
+
+		hr = pFrameEncode->Initialize(nullptr);
+		if (FAILED(hr))
+		{
+			std::cerr << "Failed to initialize WIC frame encode" << std::endl;
+			pFrameBuffer->Release();
+			pCPUTexture->Release();
+			pWICBitmap->Release();
+			pFrameEncode->Release();
+			pEncoder->Release();
+			pWICFactory->Release();
+			return false;
+		}
+
+		hr = pFrameEncode->SetSize(frameBufferDesc.Width, frameBufferDesc.Height);
+		if (FAILED(hr))
+		{
+			std::cerr << "Failed to set WIC frame size" << std::endl;
+			pFrameBuffer->Release();
+			pCPUTexture->Release();
+			pWICBitmap->Release();
+			pFrameEncode->Release();
+			pEncoder->Release();
+			pWICFactory->Release();
+			return false;
+		}
+
+		WICPixelFormatGUID formatGUID = GUID_WICPixelFormat32bppBGRA;
+		hr = pFrameEncode->SetPixelFormat(&formatGUID);
+		if (FAILED(hr))
+		{
+			std::cerr << "Failed to set WIC frame pixel format" << std::endl;
+			pFrameBuffer->Release();
+			pCPUTexture->Release();
+			pWICBitmap->Release();
+			pFrameEncode->Release();
+			pEncoder->Release();
+			pWICFactory->Release();
+			return false;
+		}
+
+		hr = pFrameEncode->WriteSource(pWICBitmap, nullptr);
+		if (FAILED(hr))
+		{
+			std::cerr << "Failed to write WIC frame source" << std::endl;
+			pFrameBuffer->Release();
+			pCPUTexture->Release();
+			pWICBitmap->Release();
+			pFrameEncode->Release();
+			pEncoder->Release();
+			pWICFactory->Release();
+			return false;
+		}
+
+		hr = pFrameEncode->Commit();
+		if (FAILED(hr))
+		{
+			std::cerr << "Failed to commit WIC frame encode" << std::endl;
+			pFrameBuffer->Release();
+			pCPUTexture->Release();
+			pWICBitmap->Release();
+			pFrameEncode->Release();
+			pEncoder->Release();
+			pWICFactory->Release();
+			return false;
+		}
+
+		hr = pEncoder->Commit();
+		if (FAILED(hr))
+		{
+			std::cerr << "Failed to commit WIC encoder" << std::endl;
+			pFrameBuffer->Release();
+			pCPUTexture->Release();
+			pWICBitmap->Release();
+			pFrameEncode->Release();
+			pEncoder->Release();
+			pWICFactory->Release();
+			return false;
+		}
+
+		// 사용한 리소스를 해제합니다.
+		pFrameBuffer->Release();
+		pCPUTexture->Release();
+		pWICBitmap->Release();
+		pFrameEncode->Release();
+		pEncoder->Release();
+		pWICFactory->Release();
+
+		CoUninitialize();
+
+		return true;
+	}
+
 	int (*ObscuredInt_Decrypted)(ObscuredInt*) = nullptr;
 	void* load_library_w_orig = nullptr;
 	HMODULE __stdcall load_library_w_hook(const wchar_t* path)
@@ -372,6 +634,9 @@ using namespace std;
 			currenthWnd = GetActiveWindow();
 			wchar_t buf[256];
 			swprintf_s(buf, L"umamusume_L (%d개 패치 적용됨)", patchCount);
+
+
+			
 
 			/*RECT rect;
 			HDC wdc = GetWindowDC(currenthWnd);
@@ -396,7 +661,11 @@ using namespace std;
 				}
 				ga = nullptr;
 			}
+
 			
+
+
+			//SaveFrameBufferToFile(pDevice, "c:\\screenshot.bmp");
 			//HMODULE sq = GetModuleHandle("baselib.dll");
 			//if (sq != nullptr) {
 			//	//std::string exe_name = module_filename(NULL);
@@ -408,6 +677,7 @@ using namespace std;
 			bootstrap_carrot_juicer();
 			MH_DisableHook(LoadLibraryW);
 			MH_RemoveHook(LoadLibraryW);
+
 
 			//Il2CppObject* dbConn = il2cpp_object_new((Il2CppClass*)il2cpp_symbols::get_class("LibNative.Runtime.dll", "LibNative.Sqlite3", "Connection"));
 
@@ -2523,6 +2793,41 @@ using namespace std;
 		return reinterpret_cast<decltype(Gallop_CutInModelController_CreateModel_hook)*>(Gallop_CutInModelController_CreateModel_orig)(context);
 	}
 
+	void* Live_Cutt_LiveTimelineControl_AlterUpdate_orig = nullptr;
+	void Live_Cutt_LiveTimelineControl_AlterUpdate_hook(void* _instance, float liveTime) {
+		if (isLiveTimeManual) {
+			liveTime = liveTimeSec;
+		}
+		else {
+			liveTimeSec = liveTime;
+		}
+		
+		return reinterpret_cast<decltype(Live_Cutt_LiveTimelineControl_AlterUpdate_hook)*>(Live_Cutt_LiveTimelineControl_AlterUpdate_orig)(_instance, liveTime);
+	}
+
+	void* Live_Director_get_LiveTotalTime_orig = nullptr;
+	float Live_Director_get_LiveTotalTime_hook(Il2CppObject* _instance) {
+		float ret = reinterpret_cast<decltype(Live_Director_get_LiveTotalTime_hook)*>(Live_Director_get_LiveTotalTime_orig)(_instance);
+		liveTotalTimeSec = ret;
+		if (isLiveTimeManual) {
+			ret = 9999.9;
+		}
+		return ret;
+	}
+
+	//void* Live_Cutt_LiveTimelineWorkSheet_cctor_orig = nullptr;
+	//void Live_Cutt_LiveTimelineWorkSheet_cctor_hook(LiveTimelineWorkSheet* _instance) {
+	//	//Il2CppClass* klass = (Il2CppClass*)_instance->klass;
+	//	//printf("name %s\n", klass->name);
+	//	
+	//	//FieldInfo* field = il2cpp_class_get_field_from_name((Il2CppClass*)_instance->klass , "TotalTimeLength");
+	//	//field
+	//	
+	//	printf("TotalTime=%.4f\n", _instance->TotalTimeLength);
+	//	
+	//	return reinterpret_cast<decltype(Live_Cutt_LiveTimelineWorkSheet_cctor_hook)*>(Live_Cutt_LiveTimelineWorkSheet_cctor_orig)(_instance);
+	//}
+
 	/*void* unity_font_ctor_orig = nullptr;
 	void* unity_font_ctor_hook(void* _this, Il2CppString* name) {
 		wprintf(L"Font Load: %s\n", name->start_char);
@@ -3456,11 +3761,42 @@ using namespace std;
 		auto ResourcePath_GetRaceResultCuttPath_addr = reinterpret_cast<Il2CppString* (*)(int,int,int,int,int,int)>(il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop",
 			"ResourcePath", "GetRaceResultCuttPath", 6
-		));
+		));	
 
 		MH_CreateHook((LPVOID)ResourcePath_GetRaceResultCuttPath_addr,
 			ResourcePath_GetRaceResultCuttPath_hook, &ResourcePath_GetRaceResultCuttPath_orig);
 		MH_EnableHook((LPVOID)ResourcePath_GetRaceResultCuttPath_addr);
+
+		
+
+		auto Live_Cutt_LiveTimelineControl_AlterUpdate_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineControl", "AlterUpdate", 1
+		);
+
+		MH_CreateHook((LPVOID)Live_Cutt_LiveTimelineControl_AlterUpdate_addr,
+			Live_Cutt_LiveTimelineControl_AlterUpdate_hook, &Live_Cutt_LiveTimelineControl_AlterUpdate_orig);
+		MH_EnableHook((LPVOID)Live_Cutt_LiveTimelineControl_AlterUpdate_addr);
+
+
+		auto Live_Director_get_LiveTotalTime_addr = reinterpret_cast<float(*)()>(il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live",
+			"Director", "get_LiveTotalTime", 0
+		));
+
+		MH_CreateHook((LPVOID)Live_Director_get_LiveTotalTime_addr,
+			Live_Director_get_LiveTotalTime_hook, &Live_Director_get_LiveTotalTime_orig);
+		MH_EnableHook((LPVOID)Live_Director_get_LiveTotalTime_addr);
+
+		/*auto  Live_Cutt_LiveTimelineWorkSheet_cctor_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop.Live.Cutt",
+			"LiveTimelineWorkSheet", ".cctor", 0
+		);
+
+		MH_CreateHook((LPVOID)Live_Cutt_LiveTimelineWorkSheet_cctor_addr,
+			Live_Cutt_LiveTimelineWorkSheet_cctor_hook, &Live_Cutt_LiveTimelineWorkSheet_cctor_orig);
+		MH_EnableHook((LPVOID)Live_Cutt_LiveTimelineWorkSheet_cctor_addr);*/
+
 
 		/*auto RaceUIFinishOrderFlash_Play_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop",
@@ -4126,6 +4462,7 @@ static void* selected_obj = 0;
 static bool show_active_box = false;
 
 
+
 int CALLBACK EnumFontFamExProc(
 	const LOGFONT* lpelfe, const TEXTMETRIC* lpntme,
 	DWORD FontType, LPARAM lparam)
@@ -4556,6 +4893,36 @@ int imguiwindow()
 		ImGui_ImplDX11_NewFrame();
 		ImGui_ImplWin32_NewFrame();
 		ImGui::NewFrame();
+		ImGuiContext& g = *GImGui;
+
+	
+		ImGui::SetNextWindowPos({ 50, 50 }, ImGuiCond_Once);
+		ImGui::SetNextWindowSize({ 550, 550 }, ImGuiCond_Once);
+
+		
+
+		ImGui::Begin("Hello World!", (bool*)0, ImGuiWindowFlags_NoTitleBar);
+		ImGui::SetWindowSize({ 0,0 });
+		ImGui::SetWindowPos({99999,99999});	
+		ImGui::End();
+
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 5.f);
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(43.f / 255.f, 43.f / 255.f, 43.f / 255.f, 100.f / 255.f));
+		ImGui::RenderNotifications();
+		ImGui::PopStyleVar(1); // Don't forget to Pop()
+		ImGui::PopStyleColor(1);
+
+		if (toastImGui) {
+			ImGui::InsertNotification({ ImGuiToastType_Success, 3000, toastMessage });
+			toastImGui = false;
+		}
+
+
+		bool isCamStopped = c_stopLiveCam;
+
+
+
+
 
 		// 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
 		if (show_demo_window)
@@ -4624,6 +4991,39 @@ int imguiwindow()
 			if (ImGui::CollapsingHeader("라이브", ImGuiTreeNodeFlags_DefaultOpen)) {
 				ImGui::Checkbox("라이브 카메라 멈추기", &c_stopLiveCam); ImGui::SameLine(); HelpMarker("라이브에서 카메라 워크를 정지합니다.\n단축키: S");
 				ImGui::Checkbox("라이브 제목 창 출력", &g_showLiveTitleWindow); ImGui::SameLine(); HelpMarker("라이브 시작 시 제목 창을 표시합니다.");				
+				
+				BeginGroupPanel("타임라인");
+
+				//int minutes = static_cast<int>(liveTimeSec / 60); // 분 계산
+				//int remainingSeconds = static_cast<int>(seconds) % 60; // 초 계산
+
+				//printf("%02d:%02d", minutes, remainingSeconds);
+
+				ImGui::Text("%02d:%02d / %02d:%02d", static_cast<int>(liveTimeSec) / 60, static_cast<int>(liveTimeSec) % 60,
+					static_cast<int>(liveTotalTimeSec) / 60, static_cast<int>(liveTotalTimeSec) % 60);
+				if (ImGui::SliderFloat("시간 조정", &liveTimeSec, 0.0, liveTotalTimeSec, "%.3f Sec" )) {
+					isLiveTimeManual = true;
+				}ImGui::SameLine(); HelpMarker("라이브 타임라인을 설정합니다.\n단축키: Ctrl+LeftArrow, Ctrl+RightArrow");
+				
+				ImGui::PushMultiItemsWidths(1, ImGui::CalcItemWidth());
+				ImGui::Indent(5.0f);
+				ImGui::PushID(0);
+				if (ImGui::Button("+")) {
+					isLiveTimeManual = true;
+					liveTimeSec = liveTimeSec + liveTimelineManualScale;
+				}ImGui::SameLine(0, g.Style.ItemInnerSpacing.x);
+				if (ImGui::InputScalar("##scale", ImGuiDataType_Float, &liveTimelineManualScale, NULL, NULL, "%.3f")) {}; ImGui::SameLine();
+				if (ImGui::Button("-")) {
+					isLiveTimeManual = true;
+					liveTimeSec = liveTimeSec - liveTimelineManualScale;
+				}ImGui::SameLine();
+				ImGui::PopID();
+				ImGui::PopItemWidth();
+				if (ImGui::Checkbox("수동 조정", &isLiveTimeManual)) {
+					//ImGui::InsertNotification({ ImGuiToastType_Success, 3000, "Hello World! This is a success! %s", "수동 조정이 활성화되었습니다." });
+					//showAlertMessage(5.0, "수동 조정이 활성화되었습니다.");
+				} ImGui::SameLine(); HelpMarker("타임라인 수동 조정을 활성화합니다.");
+				EndGroupPanel();
 				//ImGui::Checkbox("isCameraShake", &IsCamShake);
 				
 			}
@@ -4732,7 +5132,7 @@ int imguiwindow()
 			bool open = true;
 			if (ImGui::BeginPopupModal("확인", &open))
 			{
-				ImGui::Text("정말로 게임을 종료할까요?");
+				ImGui::Text("정말 게임을 종료할까요?");
 				if (ImGui::Button("아니오"))
 					ImGui::CloseCurrentPopup();
 				ImGui::SameLine();
@@ -4749,6 +5149,12 @@ int imguiwindow()
 
 			ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 			ImGui::End();
+
+
+			// Render toasts on top of everything, at the end of your code!
+			// You should push style vars here
+			
+
 		}
 
 		// 3. Show another simple window.
@@ -4794,6 +5200,8 @@ int imguiwindow()
 		pContext->OMSetRenderTargets(1, &mainRenderTargetView, NULL);
 		//pContext->ClearRenderTargetView(mainRenderTargetView, clear_color_with_alpha);
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+
+
 		//oPresent(g_pSwapChain, SyncInterval, Flags);
 		//g_pSwapChain->Present(1, 0); // Present with vsync
 		//g_pSwapChain->Present(0, 0); // Present without vsync
