@@ -1,5 +1,6 @@
 #pragma once
 #define NOMINMAX
+#define IMGUI_DEFINE_MATH_OPERATORS
 
 #include "stb_image.h"
 
@@ -7,6 +8,7 @@
 #include <WS2tcpip.h>
 #include <Windows.h>
 #include <signal.h>
+#include <time.h>
 
 #include <shlobj.h>
 
@@ -29,6 +31,8 @@
 #include <rapidjson/encodings.h>
 #include <rapidjson/istreamwrapper.h>
 #include <rapidjson/stringbuffer.h>
+#include <rapidjson/prettywriter.h>
+#include <rapidjson/filewritestream.h>
 
 #include "il2cpp/il2cpp_symbols.hpp"
 #include "local/local.hpp"
@@ -43,11 +47,15 @@
 
 #include <cstdio>
 
+
 #include "imgui/imgui.h"
 #include "imgui/backends/imgui_impl_win32.h"
 #include "imgui/backends/imgui_impl_dx11.h"
 #include "imgui_internal.h"
+
 #include "imgui/imgui_notify.h"
+
+#include "implot/implot.h"
 
 #include "d3d11.h"
 #include <wincodec.h>
@@ -56,7 +64,10 @@
 
 #include <atlconv.h>
 
+#include <deque>
+
 #include "kiero/kiero.h"
+
 
 
 
@@ -91,6 +102,77 @@ extern ID3D11ShaderResourceView* texture_kimura;
 
 #pragma endregion
 
+//must be value name = json config member name
+extern struct globalUmaSettings {
+    bool dumpStaticEntries = false;
+    bool enableLogger = false;
+    bool enableConsole = false;
+    bool autoFpsSet = false;
+    int maxFps = -1;
+    bool unlockSize = false;
+    float uiScale = 1.0f;
+    bool replaceFont = true;
+    bool autoFullscreen = true;
+    bool lz4Encrypt = true;
+    bool showLiveTitleWindow = true;
+    bool sendHorseMeterData = false;
+    bool saveMsgPack = false;
+    bool dumpGameassembly = false;
+    float rankUIShowMeter = 0.0f;
+    float rankUIHideoffset = 0.0f;
+    bool liveCharaAutoDressReplace = false;
+    bool useExclusiveFullScreen = false;
+    int exclusiveFullScreenWidth = 1920;
+    int exclusiveFullScreenHeight = 1080;
+    char* customHost = (char*)"";
+    char* customDataPath = (char*)"";
+    bool skipResourceDownload = false;
+    bool forceLandscape = false;
+    bool highQuality = true;
+    bool passPacket = false;
+    char* serverIP = (char*)"127.0.0.1";
+    int serverPort = 80;
+    bool isTapEffectEnabled = true;
+    bool isShowLiveFPSGraph = true;
+    bool isShowLivePerfInfo = true;
+
+    bool gotoTitleOnError = true; //N
+    bool walkMotionAllUrara = false;
+    bool homeAllDiamond = false;
+    bool winMotion564 = false;
+
+};
+
+extern struct localUmaSettings {
+    int gachaCutinChara = -1;
+    int gachaCutinDress = -1;
+    int gachaCutinHeadid = -1;
+    int raceResultCutinMotionChara = -1;
+    int raceResultCutinMotionDress = -1;
+    int raceResultCutinMotionGrade = -1;
+    int raceResultCutinMotionRank = -1;
+    bool stopLiveCam = false;
+    bool changeStoryChar = false;
+    int story3dCharID = -1;
+    int story3dClothID = -1;
+    int story3dMobid = -1;
+    int story3dHeadID = -1;
+    int antialiasing = 8;
+    int graphics_quality = 3;
+    int vsync_count = 0;
+    int cardid = -1;
+    float aspect_ratio = 16.f / 9.f;
+    int gachaCharaType = -1;
+    bool isLiveTimeManual = false;
+    bool isShowLivePerfInfo = true;
+    bool isShowLiveFPSGraph = false;
+};
+
+extern globalUmaSettings* g_sett;
+extern const globalUmaSettings* g_sett_initial;
+
+extern localUmaSettings* sett;
+
 extern struct hookStr
 {
 	const char* assemblyName;
@@ -107,51 +189,38 @@ extern bool hook_end;
 
 extern int patchCount;
 
-extern bool g_dump_entries;
-extern bool g_enable_logger;
-extern bool g_enable_console;
-extern int g_max_fps;
-extern bool g_unlock_size;
-extern float g_ui_scale;
-extern float g_aspect_ratio;
-extern bool g_replace_font;
-extern bool g_auto_fullscreen;
-extern bool g_autofps;
-extern bool g_lz4Encrypt;
-extern bool g_showLiveTitleWindow;
-extern bool g_sendHorseMeterData;
-extern bool g_saveMsgPack;
-extern bool g_dumpGamedll;
-extern float g_rankUIShowMeter;
-extern float g_rankUIHideoffset;
-extern bool g_liveCharaAutoDressReplace;
-extern bool g_useExclusiveFullScreen;
-extern int g_exclusiveFullScreenWidth;
-extern int g_exclusiveFullScreenHeight;
-extern char* g_customDataPath;
-extern char* g_customHost;
-extern bool g_skipResourceDownload;
-extern int c_gachaCutinChara;
-extern int c_gachaCutinDress;
-extern int c_gachaCutinHeadid;
-extern bool c_stopLiveCam;
-extern int c_raceResultCutinMotionChara;
-extern int c_raceResultCutinMotionDress;
-extern int c_raceResultCutinMotionGrade;
-extern int c_raceResultCutinMotionRank;
-extern bool c_changeStoryChar;
-extern int c_story3dCharID;
-extern int c_story3dClothID;
-extern int c_story3dMobid;
-extern int c_story3dHeadID;
-extern bool g_force_landscape;
-extern int g_antialiasing ;
-extern int g_graphics_quality;
-extern int g_vsync_count;
-extern int g_cardid;
-extern bool g_highquality;
+
+
+
 
 
 extern TimelineKeyCharacterType c_gachaCharaType;
 
 void ResetGame();
+
+char* (*msgPackToJson)(char* MsgPackBuffer, int size);
+
+extern struct ScrollingBuffer {
+    int MaxSize;
+    int Offset;
+    ImVector<ImVec2> Data;
+    ScrollingBuffer(int max_size = 2000) {
+        MaxSize = max_size;
+        Offset = 0;
+        Data.reserve(MaxSize);
+    }
+    void AddPoint(float x, float y) {
+        if (Data.size() < MaxSize)
+            Data.push_back(ImVec2(x, y));
+        else {
+            Data[Offset] = ImVec2(x, y);
+            Offset = (Offset + 1) % MaxSize;
+        }
+    }
+    void Erase() {
+        if (Data.size() > 0) {
+            Data.shrink(0);
+            Offset = 0;
+        }
+    }
+};

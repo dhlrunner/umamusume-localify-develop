@@ -82,8 +82,8 @@ namespace {
             else if (line.rfind("fps", 0) == 0) {
                 std::vector < std::string > arg = explode(line, ' ');
                 try {
-                    g_max_fps = std::stoi(arg.at(1).c_str());
-                    printf("fps limit setted to : %d\n", g_max_fps);
+                    g_sett->maxFps = std::stoi(arg.at(1).c_str());
+                    printf("fps limit setted to : %d\n", g_sett->maxFps);
                 }
                 catch (std::invalid_argument&) {
                     printf("Fps Value Error: please enter number only\n");
@@ -94,21 +94,21 @@ namespace {
 
             }
             else if (line == "autofps") {
-                g_autofps = !g_autofps;
-                printf("Auto fps limit %s\n", g_autofps ? "enabled." : "disabled.");
+                g_sett->autoFpsSet = !g_sett->autoFpsSet;
+                printf("Auto fps limit %s\n", g_sett->autoFpsSet ? "enabled." : "disabled.");
             }
             else if (line == "useExclusiveFullscreen") {
-                g_useExclusiveFullScreen = !g_useExclusiveFullScreen;
-                printf("Exclusive Fullscreen mode %s\n", g_useExclusiveFullScreen ? "enabled." : "disabled.");
+                g_sett->useExclusiveFullScreen = !g_sett->useExclusiveFullScreen;
+                printf("Exclusive Fullscreen mode %s\n", g_sett->useExclusiveFullScreen ? "enabled." : "disabled.");
             }
             else if (line == "resetFullscreen") {
-                if (!g_useExclusiveFullScreen) {
+                if (!g_sett->useExclusiveFullScreen) {
                     printf_s("Error: Exclusive fullscreen mode is not enabled.\n");
                 }
                 else {
 
                     //setExclusiveFullScreen(g_exclusiveFullScreenWidth, g_exclusiveFullScreenHeight, ExclusiveFullScreen, g_max_fps);
-                    adjust_size(g_exclusiveFullScreenWidth, g_exclusiveFullScreenHeight);
+                    adjust_size(g_sett->exclusiveFullScreenWidth, g_sett->exclusiveFullScreenHeight);
 
                 }
 
@@ -145,10 +145,10 @@ namespace {
                     int dressId = std::stoi(arg.at(3).c_str());
                     int headid = std::stoi(arg.at(4).c_str());
                     printf_s("Set cutin character: Type=%d, CharaID=%d, DressID=%d, HeadID=%d\n", type, charaId, dressId, headid);
-                    c_gachaCharaType = (TimelineKeyCharacterType)type;
-                    c_gachaCutinChara = charaId;
-                    c_gachaCutinDress = dressId;
-                    c_gachaCutinHeadid = headid;
+                    sett->gachaCharaType = (TimelineKeyCharacterType)type;
+                    sett->gachaCutinChara = charaId;
+                    sett->gachaCutinDress = dressId;
+                    sett->gachaCutinHeadid = headid;
                     //set_resolution_hook(weight, height,false);
                     //adjust_size(weight, height);
                 }
@@ -168,10 +168,10 @@ namespace {
                     int grade = std::stoi(arg.at(3).c_str());
                     int rank = std::stoi(arg.at(4).c_str());
                     printf_s("Set raceresult cutin motion: CharaID=%d, DressID=%d, RaceGrade=%d, ResultRank=%d\n", charaId, dressId, grade, rank);
-                    c_raceResultCutinMotionChara = charaId;
-                    c_raceResultCutinMotionDress = dressId;
-                    c_raceResultCutinMotionGrade = grade;
-                    c_raceResultCutinMotionRank = rank;
+                    sett->raceResultCutinMotionChara = charaId;
+                    sett->raceResultCutinMotionDress = dressId;
+                    sett->raceResultCutinMotionGrade = grade;
+                    sett->raceResultCutinMotionRank = rank;
                 }
                 catch (std::invalid_argument&) {
                     printf("Value Error: please enter number only\n");
@@ -182,22 +182,22 @@ namespace {
             }
             else if (line.starts_with("resetCutin")) {
                 printf_s("Reset all cutin character currently setted.\n");
-                c_gachaCharaType = (TimelineKeyCharacterType)-1;
-                c_gachaCutinChara = -1;
-                c_gachaCutinDress = -1;
-                c_gachaCutinHeadid = -1;
+                sett->gachaCharaType = (TimelineKeyCharacterType)-1;
+                sett->gachaCutinChara = -1;
+                sett->gachaCutinDress = -1;
+                sett->gachaCutinHeadid = -1;
             }
             else if (line.starts_with("stopLiveCam")) {
-                printf_s("%s live camara\n", c_stopLiveCam ? "Restored" : "Stopped");
-                c_stopLiveCam = !c_stopLiveCam;
+                printf_s("%s live camara\n", sett->stopLiveCam ? "Restored" : "Stopped");
+                sett->stopLiveCam = !sett->stopLiveCam;
             }
             else if (line.starts_with("skipResDL")) {
-                printf_s("%s Resource Download\n", g_skipResourceDownload ? "Skip" : "Enable");
-                g_skipResourceDownload = !g_skipResourceDownload;
+                printf_s("%s Resource Download\n", g_sett->skipResourceDownload ? "Skip" : "Enable");
+                g_sett->skipResourceDownload = !g_sett->skipResourceDownload;
             }
             else if (line.starts_with("story3dCharSetEnable")) {
-                c_changeStoryChar = !c_changeStoryChar;
-                printf("StoryChar3D change mode %s\n", c_changeStoryChar ? "enabled." : "disabled.");
+                sett->changeStoryChar = !sett->changeStoryChar;
+                printf("StoryChar3D change mode %s\n", sett->changeStoryChar ? "enabled." : "disabled.");
             }
             else if (line.starts_with("story3dCharSet")) {
                 std::vector < std::string > arg = explode(line, ' ');
@@ -208,10 +208,10 @@ namespace {
                     int mobid = std::stoi(arg.at(3).c_str());
                     int headid = std::stoi(arg.at(4).c_str());
                     printf_s("Set Story3d model : CharaID=%d, DressID=%d, MobID=%d, HeadID=%d\n", charaId, dressId, mobid, headid);
-                    c_story3dCharID = charaId;
-                    c_story3dClothID = dressId;
-                    c_story3dMobid = mobid ;
-                    c_story3dHeadID = headid;
+                    sett->story3dCharID = charaId;
+                    sett->story3dClothID = dressId;
+                    sett->story3dMobid = mobid ;
+                    sett->story3dHeadID = headid;
                 }
                 catch (std::invalid_argument&) {
                     printf("Value Error: please enter number only\n");
@@ -224,7 +224,7 @@ namespace {
                 try {
                     std::vector < std::string > arg = explode(line, ' ');
                     int cardId = std::stoi(arg.at(1).c_str());
-                    g_cardid = cardId;
+                    sett->cardid = cardId;
                     printf_s("Set GetCardid ret: %d\n", cardId);
                 }
                 catch (std::invalid_argument&) {

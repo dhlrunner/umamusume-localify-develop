@@ -25,6 +25,9 @@
     <Filter Include="kiero">
       <UniqueIdentifier>{11998b2d-36f7-48f3-b402-e6d45ac4eb45}</UniqueIdentifier>
     </Filter>
+    <Filter Include="implot">
+      <UniqueIdentifier>{90fd8c6f-1264-49c5-b67b-e53cbd18e0cb}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\il2cpp\il2cpp_symbols.hpp">
@@ -92,6 +95,12 @@
     <ClInclude Include="..\src\imgui\imgui_notify.h">
       <Filter>imgui</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\implot\implot.h">
+      <Filter>implot</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\implot\implot_internal.h">
+      <Filter>implot</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\console.cpp" />
@@ -148,6 +157,15 @@
     </ClCompile>
     <ClCompile Include="..\src\kiero\kiero.cpp">
       <Filter>kiero</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\implot\implot.cpp">
+      <Filter>implot</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\implot\implot_demo.cpp">
+      <Filter>implot</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\implot\implot_items.cpp">
+      <Filter>implot</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

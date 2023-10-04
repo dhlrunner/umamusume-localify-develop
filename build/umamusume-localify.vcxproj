@@ -68,7 +68,7 @@
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/std:c++latest /Zm1000 /utf-8 %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>..\src\PEDump\;..\src\lz4;..\src\;..\deps\rapidjson\include;..\deps\minhook\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\src\PEDump\;..\src\lz4;..\src\;..\deps\rapidjson\include;..\deps\minhook\include\;..\src\cereal;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ExceptionHandling>Async</ExceptionHandling>
     </ClCompile>
     <Link>
@@ -121,6 +121,8 @@ copy /y "$(TargetPath)" "C:\Users\dhl\Umamusume\$(TargetFileName)"</Command>
     <ClInclude Include="..\src\imgui\imstb_rectpack.h" />
     <ClInclude Include="..\src\imgui\imstb_textedit.h" />
     <ClInclude Include="..\src\imgui\imstb_truetype.h" />
+    <ClInclude Include="..\src\implot\implot.h" />
+    <ClInclude Include="..\src\implot\implot_internal.h" />
     <ClInclude Include="..\src\kiero\kiero.h" />
     <ClInclude Include="..\src\local\local.hpp" />
     <ClInclude Include="..\src\logger\logger.hpp" />
@@ -147,6 +149,9 @@ copy /y "$(TargetPath)" "C:\Users\dhl\Umamusume\$(TargetFileName)"</Command>
     <ClCompile Include="..\src\imgui\imgui_draw.cpp" />
     <ClCompile Include="..\src\imgui\imgui_tables.cpp" />
     <ClCompile Include="..\src\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="..\src\implot\implot.cpp" />
+    <ClCompile Include="..\src\implot\implot_demo.cpp" />
+    <ClCompile Include="..\src\implot\implot_items.cpp" />
     <ClCompile Include="..\src\kiero\kiero.cpp" />
     <ClCompile Include="..\src\local\local.cpp" />
     <ClCompile Include="..\src\logger\logger.cpp" />

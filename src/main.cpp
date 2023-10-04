@@ -1443,59 +1443,31 @@ ID3D11ShaderResourceView* texture_kimura = NULL;
 int kimura_image_width = 0;
 int kimura_image_height = 0;
 
-bool g_dump_entries = false;
-bool g_enable_logger = false;
-bool g_enable_console = false;
-bool g_autofps = false;
-int g_max_fps = -1;
-bool g_unlock_size = false;
-float g_ui_scale = 1.0f;
-float g_aspect_ratio = 16.f / 9.f;
-bool g_replace_font = true;
-bool g_auto_fullscreen = true;
-bool g_lz4Encrypt = true;
-bool g_showLiveTitleWindow = true;
-bool g_sendHorseMeterData = false;
-bool g_saveMsgPack = false;
-bool g_dumpGamedll = false;
-float g_rankUIShowMeter = 0.0f;
-float g_rankUIHideoffset = 0.0f;
-bool g_liveCharaAutoDressReplace = false;
-bool g_useExclusiveFullScreen = false;
-int g_exclusiveFullScreenWidth = 1920;
-int g_exclusiveFullScreenHeight = 1080;
-char* g_customHost;
-char* g_customDataPath;
-bool g_skipResourceDownload = false;
-int c_gachaCutinChara=-1;
-int c_gachaCutinDress=-1;
-int c_gachaCutinHeadid = -1;
-int c_raceResultCutinMotionChara = -1;
-int c_raceResultCutinMotionDress = -1;
-int c_raceResultCutinMotionGrade = -1;
-int c_raceResultCutinMotionRank = -1;
-bool c_stopLiveCam = false;
-bool c_changeStoryChar = false;
-int c_story3dCharID = -1;
-int c_story3dClothID = -1;
-int c_story3dMobid = -1;
-int c_story3dHeadID = -1;
+globalUmaSettings* g_sett = new globalUmaSettings();
+const globalUmaSettings* g_sett_initial = new globalUmaSettings();
+
+localUmaSettings* sett = new localUmaSettings();
+
 int patchCount = 0;
 TimelineKeyCharacterType c_gachaCharaType = (TimelineKeyCharacterType)-1;
-bool g_force_landscape = false;
-bool g_highquality = true;
-int g_antialiasing = 8;
-int g_graphics_quality = 3;
-int g_vsync_count = 0;
-int g_cardid = -1;
 
+std::vector<std::string> dicts;
 
-namespace
-{
-	void create_debug_console()
+void saveSettingsToJSON();
+
+void create_debug_console()
 	{
 		AllocConsole();
 
+		if (HWND hwnd = GetConsoleWindow())
+		{
+			if (HMENU hMenu = GetSystemMenu(hwnd, FALSE))
+			{
+				EnableMenuItem(hMenu, SC_CLOSE, MF_BYCOMMAND | MF_DISABLED | MF_GRAYED);
+			}
+		}
+
+		//SetConsoleCtrlHandler(HandlerRoutine, TRUE);
 		// open stdout stream
 		auto _ = freopen("CONOUT$", "w", stdout);
 		_ = freopen("CONOUT$", "w", stderr);
@@ -1523,7 +1495,7 @@ namespace
 
 	}
 
-	std::vector<std::string> read_config()
+std::vector<std::string> read_config()
 	{
 		std::ifstream config_stream { "config.json" };
 		std::vector<std::string> dicts {};
@@ -1538,34 +1510,48 @@ namespace
 
 		if (!document.HasParseError())
 		{
-			g_enable_console = document["enableConsole"].GetBool();
-			g_enable_logger = document["enableLogger"].GetBool();
-			g_dump_entries = document["dumpStaticEntries"].GetBool();
-			g_max_fps = document["maxFps"].GetInt();
-			g_unlock_size = document["unlockSize"].GetBool();
-			g_ui_scale = document["uiScale"].GetFloat();
-			g_replace_font = document["replaceFont"].GetBool();
-			g_auto_fullscreen = document["autoFullscreen"].GetBool();
-			g_autofps = document["autoFpsSet"].GetBool();
-			g_lz4Encrypt = document["lz4Encrypt"].GetBool();
-			g_dumpGamedll = document["dumpGameassembly"].GetBool();
-			g_saveMsgPack = document["saveMsgPack"].GetBool();
-			g_showLiveTitleWindow = document["showLiveTitleWindow"].GetBool();
-			g_sendHorseMeterData = document["sendHorseMeterData"].GetBool();
-			g_rankUIShowMeter = document["rankUIShowMeter"].GetFloat();
-			g_rankUIHideoffset = document["rankUIHideoffset"].GetFloat();
-			g_liveCharaAutoDressReplace = document["liveCharaAutoDressReplace"].GetBool();
-			g_useExclusiveFullScreen = document["useExclusiveFullScreen"].GetBool();
-			g_exclusiveFullScreenWidth = document["exclusiveFullScreenWidth"].GetInt();
-			g_exclusiveFullScreenHeight = document["exclusiveFullScreenHeight"].GetInt();
-			const char* d = document["customHost"].GetString();
-			g_customHost = new char[strlen(d)+1];
-			strcpy(g_customHost, d);
-			const char* tt = document["customDataPath"].GetString();
-			g_customDataPath = new char[strlen(tt) + 1];
-			strcpy(g_customDataPath, tt);
-			//g_skipResourceDownload = document["skipResourceDownload"].GetBool();
 			
+			g_sett->enableConsole = document.HasMember("enableConsole") ? document["enableConsole"].GetBool() : g_sett_initial->enableConsole;
+			g_sett->enableLogger = document.HasMember("enableLogger") ? document["enableLogger"].GetBool() : g_sett_initial->enableLogger;
+			g_sett->dumpStaticEntries = document.HasMember("dumpStaticEntries") ? document["dumpStaticEntries"].GetBool() : g_sett_initial->dumpStaticEntries;
+			g_sett->maxFps = document.HasMember("maxFps") ? document["maxFps"].GetInt() : g_sett_initial->maxFps;
+			g_sett->unlockSize = document.HasMember("unlockSize") ? document["unlockSize"].GetBool() : g_sett_initial->unlockSize;
+			g_sett->uiScale = document.HasMember("uiScale") ? document["uiScale"].GetFloat() : g_sett_initial->uiScale;
+			g_sett->replaceFont = document.HasMember("replaceFont") ? document["replaceFont"].GetBool() : g_sett_initial->replaceFont;
+			g_sett->autoFullscreen = document.HasMember("autoFullscreen") ? document["autoFullscreen"].GetBool() : g_sett_initial->autoFullscreen;
+			g_sett->autoFpsSet = document.HasMember("autoFpsSet") ? document["autoFpsSet"].GetBool() : g_sett_initial->autoFpsSet;
+			g_sett->lz4Encrypt = document.HasMember("lz4Encrypt") ? document["lz4Encrypt"].GetBool() : g_sett_initial->lz4Encrypt;
+			g_sett->dumpGameassembly = document.HasMember("dumpGameassembly") ? document["dumpGameassembly"].GetBool() : g_sett_initial->dumpGameassembly;
+			g_sett->saveMsgPack = document.HasMember("saveMsgPack") ? document["saveMsgPack"].GetBool() : g_sett_initial->saveMsgPack;
+			g_sett->showLiveTitleWindow = document.HasMember("showLiveTitleWindow") ? document["showLiveTitleWindow"].GetBool() : g_sett_initial->showLiveTitleWindow;
+			g_sett->sendHorseMeterData = document.HasMember("sendHorseMeterData") ? document["sendHorseMeterData"].GetBool() : g_sett_initial->sendHorseMeterData;
+			g_sett->rankUIShowMeter = document.HasMember("rankUIShowMeter") ? document["rankUIShowMeter"].GetFloat() : g_sett_initial->rankUIShowMeter;
+			g_sett->rankUIHideoffset = document.HasMember("rankUIHideoffset") ? document["rankUIHideoffset"].GetFloat() : g_sett_initial->rankUIHideoffset;
+			g_sett->liveCharaAutoDressReplace = document.HasMember("liveCharaAutoDressReplace") ? document["liveCharaAutoDressReplace"].GetBool() : g_sett_initial->liveCharaAutoDressReplace;
+			g_sett->useExclusiveFullScreen = document.HasMember("useExclusiveFullScreen") ? document["useExclusiveFullScreen"].GetBool() : g_sett_initial->useExclusiveFullScreen;
+			g_sett->exclusiveFullScreenWidth = document.HasMember("exclusiveFullScreenWidth") ? document["exclusiveFullScreenWidth"].GetInt() : g_sett_initial->exclusiveFullScreenWidth;
+			g_sett->exclusiveFullScreenHeight = document.HasMember("exclusiveFullScreenHeight") ? document["exclusiveFullScreenHeight"].GetInt() : g_sett_initial->exclusiveFullScreenHeight;
+			g_sett->gotoTitleOnError = document.HasMember("gotoTitleOnError") ? document["gotoTitleOnError"].GetBool() : g_sett_initial->gotoTitleOnError;
+
+			g_sett->passPacket = document.HasMember("passPacket") ? document["passPacket"].GetBool() : g_sett_initial->passPacket;
+			
+			const char* s = document.HasMember("serverIP") ? document["serverIP"].GetString() : g_sett_initial->serverIP;
+			g_sett->serverIP = new char[strlen(s) + 1];
+			strcpy(g_sett->serverIP, s);
+
+			g_sett->serverPort = document.HasMember("serverPort") ? document["serverPort"].GetInt() : g_sett_initial->serverPort;
+
+			const char* d = document.HasMember("customHost") ? document["customHost"].GetString() : g_sett_initial->customHost ;
+			g_sett->customHost = new char[strlen(d)+1];
+			strcpy(g_sett->customHost, d);
+			const char* tt = document.HasMember("customDataPath") ? document["customDataPath"].GetString() : g_sett_initial->customDataPath ;
+			g_sett->customDataPath = new char[strlen(tt) + 1];
+			strcpy(g_sett->customDataPath, tt);
+
+			g_sett->skipResourceDownload = document.HasMember("skipResourceDownload") ?  document["skipResourceDownload"].GetBool() : g_sett_initial->skipResourceDownload ;
+			g_sett->forceLandscape = document.HasMember("forceLandscape") ? document["forceLandscape"].GetBool() : g_sett_initial->forceLandscape;
+			g_sett->highQuality = document.HasMember("highQuality") ? document["highQuality"].GetBool() : g_sett_initial->highQuality;
+			g_sett->isTapEffectEnabled = document.HasMember("isTapEffectEnabled") ? document["isTapEffectEnabled"].GetBool() : g_sett_initial->isTapEffectEnabled;
 			// Looks like not working for now
 			// g_aspect_ratio = document["customAspectRatio"].GetFloat();
 
@@ -1578,14 +1564,78 @@ namespace
 
 				dicts.push_back(dict);
 			}
+
+			
 		}
 		else {
-			MessageBox(NULL, L"Config.json parse error", L"Error", MB_OK | MB_ICONERROR);
+			MessageBox(NULL, L"Config.json parse error. Load initial value.", L"Error", MB_OK | MB_ICONERROR);
 		}
 
 		config_stream.close();
 		return dicts;
 	}
+
+
+void saveSettingsToJSON() {
+	rapidjson::Document document;
+	document.SetObject();
+
+	rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
+
+	// Add each member of the structure to the document
+	document.AddMember("dumpStaticEntries", g_sett->dumpStaticEntries, allocator);
+	document.AddMember("enableLogger", g_sett->enableLogger, allocator);
+	document.AddMember("enableConsole", g_sett->enableConsole, allocator);
+	document.AddMember("autoFpsSet", g_sett->autoFpsSet, allocator);
+	document.AddMember("maxFps", g_sett->maxFps, allocator);
+	document.AddMember("unlockSize", g_sett->unlockSize, allocator);
+	document.AddMember("uiScale", g_sett->uiScale, allocator);
+	document.AddMember("replaceFont", g_sett->replaceFont, allocator);
+	document.AddMember("autoFullscreen", g_sett->autoFullscreen, allocator);
+	document.AddMember("lz4Encrypt", g_sett->lz4Encrypt, allocator);
+	document.AddMember("showLiveTitleWindow", g_sett->showLiveTitleWindow, allocator);
+	document.AddMember("sendHorseMeterData", g_sett->sendHorseMeterData, allocator);
+	document.AddMember("saveMsgPack", g_sett->saveMsgPack, allocator);
+	document.AddMember("dumpGameassembly", g_sett->dumpGameassembly, allocator);
+	document.AddMember("rankUIShowMeter", g_sett->rankUIShowMeter, allocator);
+	document.AddMember("rankUIHideoffset", g_sett->rankUIHideoffset, allocator);
+	document.AddMember("liveCharaAutoDressReplace", g_sett->liveCharaAutoDressReplace, allocator);
+	document.AddMember("useExclusiveFullScreen", g_sett->useExclusiveFullScreen, allocator);
+	document.AddMember("exclusiveFullScreenWidth", g_sett->exclusiveFullScreenWidth, allocator);
+	document.AddMember("exclusiveFullScreenHeight", g_sett->exclusiveFullScreenHeight, allocator);
+	document.AddMember("customHost", rapidjson::StringRef(g_sett->customHost), allocator);
+	document.AddMember("customDataPath", rapidjson::StringRef(g_sett->customDataPath), allocator);
+	document.AddMember("skipResourceDownload", g_sett->skipResourceDownload, allocator);
+	document.AddMember("forceLandscape", g_sett->forceLandscape, allocator);
+	document.AddMember("highQuality", g_sett->highQuality, allocator);
+	document.AddMember("passPacket", g_sett->passPacket, allocator);
+	document.AddMember("serverIP", rapidjson::StringRef(g_sett->serverIP), allocator);
+	document.AddMember("serverPort", g_sett->serverPort, allocator);
+	document.AddMember("isTapEffectEnabled", g_sett->isTapEffectEnabled, allocator);
+	document.AddMember("isShowLiveFPSGraph", g_sett->isShowLiveFPSGraph, allocator);
+	document.AddMember("isShowLivePerfInfo", g_sett->isShowLivePerfInfo, allocator);
+	document.AddMember("gotoTitleOnError", g_sett->gotoTitleOnError, allocator);
+	document.AddMember("walkMotionAllUrara", g_sett->walkMotionAllUrara, allocator);
+	document.AddMember("homeAllDiamond", g_sett->homeAllDiamond, allocator);
+	document.AddMember("winMotion564", g_sett->winMotion564, allocator);
+
+
+	rapidjson::Value dictArr(rapidjson::Type::kArrayType);
+
+	for (const auto& s : dicts) {
+		dictArr.PushBack(rapidjson::StringRef(s.c_str()), allocator);
+	}
+	document.AddMember("dicts", dictArr, allocator);
+
+	// Save to file
+	FILE* fp = fopen("config.json", "wb"); // non-Windows use "w"
+
+	char writeBuffer[65536];
+	rapidjson::FileWriteStream os(fp, writeBuffer, sizeof(writeBuffer));
+	rapidjson::PrettyWriter<rapidjson::FileWriteStream> writer(os);
+	document.Accept(writer);
+
+	fclose(fp);
 }
 
 void createRenderTarget()
@@ -1612,6 +1662,7 @@ void InitImGui()
 
 	printf("initimgui()\n");
 	ImGui::CreateContext();
+	ImPlot::CreateContext();
 	ImGuiIO& io = ImGui::GetIO();
 	io.ConfigFlags = ImGuiConfigFlags_NoMouseCursorChange;
 	//io.MouseDrawCursor = true;
@@ -1632,6 +1683,10 @@ LRESULT __stdcall WndProc(const HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
 	if (true && ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam))
 		return true;
+
+	if (uMsg == WM_CLOSE || uMsg == WM_DESTROY) {
+		saveSettingsToJSON();
+	}
 
 	/*if (uMsg == WM_SIZE) {
 		if (pDevice != NULL && wParam != SIZE_MINIMIZED)
@@ -1792,14 +1847,10 @@ int __stdcall DllMain(HINSTANCE, DWORD reason, LPVOID)
 			module_path.parent_path()
 		);
 
-		auto dicts = read_config();
+		dicts = read_config();
 
-		
-		
-			
-
-		std::thread init_thread([dicts]() {
-			if (g_enable_console)
+		std::thread init_thread([&]() {
+			if (g_sett->enableConsole)
 				create_debug_console();
 			logger::init_logger();
 			local::load_textdb(&dicts);
@@ -1808,8 +1859,9 @@ int __stdcall DllMain(HINSTANCE, DWORD reason, LPVOID)
 
 			
 
-			if (g_enable_console)
+			if (g_sett->enableConsole)
 				start_console();
+
 			});
 		init_thread.detach();
 
@@ -1817,15 +1869,23 @@ int __stdcall DllMain(HINSTANCE, DWORD reason, LPVOID)
 		DisableThreadLibraryCalls(hMod);
 		CreateThread(nullptr, 0, (LPTHREAD_START_ROUTINE)MainThread, hMod, 0, nullptr);
 
+		//Load my plugins
+		printf("Loading plugin modules");
+		HMODULE pluginMod = LoadLibraryA("plugins/Uma.Helper.dll");
+		msgPackToJson = (char* (*)(char*,int))GetProcAddress(pluginMod, "msgPackToJson");
+		printf("Plugin module load end");
 
-		
 	}
 	else if (reason == DLL_PROCESS_DETACH)
 	{
+		
 		uninit_hook();
 		logger::close_logger();
 		kiero::shutdown();
+		
+		//IDK why this not working
+		//saveSettingsToJSON();
 	}
-
+	
 	return 1;
 }

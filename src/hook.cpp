@@ -13,15 +13,10 @@ HWND currenthWnd = NULL;
 HWND imguiWnd = NULL;
 bool hook_end = false;
 bool imguiShow = false;
-bool g_sendserver = true;
 bool beforePatched = false;
-bool g_gotoTitleOnError = true; //N
-bool g_walkMotionAllUrara = false;
-bool g_homeAllDiamond = false;
-bool g_winMotion564 = false;
+
 bool imgui_settingwnd_open = false;
-int server_port = 80;
-char server_ip[256];
+
 DWORD getCurrentDisplayHz();
 void DumpHex(const void* data, size_t size);
 void (*setExclusiveFullScreen)(int, int, int, int) = nullptr;
@@ -40,13 +35,17 @@ Url lastUrl;
 Url currentUrl;
 float liveTimeSec = 0.0;
 float liveTotalTimeSec = 0.0;
-bool isLiveTimeManual = false;
+
 float liveTimelineManualScale = 0.1;
 bool toastImGui = false;
+
+int liveTimeLineFPS = 0;
 char* toastMessage;
 void startThread();
 void hook_beforeboot();
+int currSceneID = -1;
 
+const char* GPUName;
 //void setCustomFont();
 
 
@@ -62,285 +61,311 @@ using namespace std;
 
 
 	
-	int race_Currentrank = 0;
-	int race_MaxRank = 0;
-	bool isLiveStartFlag = false;
-	int count = 0;
-	float horseMeters[MAX_HORSE_NUM] = {0.1};
-	float lastMeter = 0.0;
-	bool (*GetKeyDown)(KeyCode) = nullptr;
-	bool (*GetKey)(KeyCode) = nullptr;
-	void (*TapEffect_Disable)(void*);
-	bool isKimuraChallenge = false;
+int race_Currentrank = 0;
+int race_MaxRank = 0;
+bool isLiveStartFlag = false;
+int count = 0;
+float horseMeters[MAX_HORSE_NUM] = {0.1};
+float lastMeter = 0.0;
+bool (*GetKeyDown)(KeyCode) = nullptr;
+bool (*GetKey)(KeyCode) = nullptr;
+void (*TapEffect_Disable)(void*);
+bool isKimuraChallenge = false;
 
-	void (*SoftwareReset)(void*);
-	void (*LoadScene)(Il2CppString*, LoadSceneParameters*);
-	void (*set_TimeScale)(float);
-	float (*get_TimeScale)();
-	void* (*UIManager_GetCanvasScalerList)(void*);
-	bool showFinishOrderFlash = true;
+void (*SoftwareReset)(void*);
+void (*LoadScene)(Il2CppString*, LoadSceneParameters*);
+void (*set_TimeScale)(float);
+float (*get_TimeScale)();
+void* (*UIManager_GetCanvasScalerList)(void*);
+Il2CppString* (*GetGraphicsDeviceName)();
+bool showFinishOrderFlash = true;
+
+void* (*GameObject_Find)(Il2CppString*);
+
+void SignalHandler(int signal)
+{
+	printf("Signal %d", signal);
+	throw "!Access Violation!";
+}
 
 
-	void SignalHandler(int signal)
-	{
-		printf("Signal %d", signal);
-		throw "!Access Violation!";
+BOOL EnableCloseButton(const HWND hwnd, const BOOL bState)
+{
+	HMENU   hMenu;
+	UINT    dwExtra;
+
+	if (hwnd == NULL) return FALSE;
+	if ((hMenu = GetSystemMenu(hwnd, FALSE)) == NULL) return FALSE;
+	dwExtra = bState ? MF_ENABLED : (MF_DISABLED | MF_GRAYED);
+	return EnableMenuItem(hMenu, SC_CLOSE, MF_BYCOMMAND | dwExtra) != -1;
+}
+
+bool hasEnding(std::string const& fullString, std::string const& ending) {
+	if (fullString.length() >= ending.length()) {
+		return (0 == fullString.compare(fullString.length() - ending.length(), ending.length(), ending));
+	}
+	else {
+		return false;
+	}
+}
+
+string ReplaceAll(std::string str, const std::string& from, const std::string& to) {
+	size_t start_pos = 0;
+	while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
+		str.replace(start_pos, from.length(), to);
+		start_pos += to.length(); // Handles case where 'to' is a substring of 'from'
+	}
+	return str;
+}
+
+void GameObject_SetActive(const char* path, bool enable) {
+	Il2CppObject* gobj = (Il2CppObject*)GameObject_Find(il2cpp_string_new(string(path).data()));
+	auto gobj_setActive = reinterpret_cast<void (*)
+		(Il2CppObject * _instance, bool value)>(il2cpp_class_get_method_from_name(gobj->klass, "SetActive", 1)->methodPointer);
+	if (gobj != nullptr) {
+		printf("Get GameObj path=%s, res=0x%p, SetActive %d\n", path, &gobj, enable);
+		gobj_setActive(gobj, enable);
+	}
+	else {
+		printf("Error: Get GameObj path=%s is nullptr!!\n", path);
 	}
 
+}
 
-	BOOL EnableCloseButton(const HWND hwnd, const BOOL bState)
-	{
-		HMENU   hMenu;
-		UINT    dwExtra;
+void ResetGame() {
+	LoadSceneParameters p = { 0 };
+	p.LoadSceneMode = 0; //Single
+	p.LocalPhysicsMode = 0;
+	LoadScene(il2cpp_string_new(string("_Boot").data()), &p);
+}
 
-		if (hwnd == NULL) return FALSE;
-		if ((hMenu = GetSystemMenu(hwnd, FALSE)) == NULL) return FALSE;
-		dwExtra = bState ? MF_ENABLED : (MF_DISABLED | MF_GRAYED);
-		return EnableMenuItem(hMenu, SC_CLOSE, MF_BYCOMMAND | dwExtra) != -1;
+
+
+void* s2c_orig = nullptr;
+Il2CppChar* s2c_hook(void* _this)
+{
+
+	Il2CppChar* ret = reinterpret_cast<decltype(s2c_hook)*>(s2c_orig)(_this);
+
+	return ret;
+
+}
+
+string UmaGetString(Il2CppString_unk* in, int debug = 1) {
+	string out = "";
+	long long length = s2c_hook(in)->length;
+	//printf("length is %d\n", length);
+	short* start = &(s2c_hook(in)->start_char);
+	//printf("start is %p\n", start);
+	for (int i = 0; i <= length - 1; i++) {
+		if (debug == 1) {
+			printf("Text is %p\n", *start);
+		}
+		out += *(start++);
 	}
+	return out;
+}
 
-	bool hasEnding(std::string const& fullString, std::string const& ending) {
-		if (fullString.length() >= ending.length()) {
-			return (0 == fullString.compare(fullString.length() - ending.length(), ending.length(), ending));
+std::vector < std::string > explode(const std::string& str,
+	const char& ch) {
+	std::string next;
+	std::vector < std::string > result;
+
+	// For each character in the string
+	for (std::string::const_iterator it = str.begin(); it != str.end(); it++) {
+		// If we've hit the terminal character
+		if (*it == ch) {
+			// If we have some characters accumulated
+			if (!next.empty()) {
+				// Add them to the result vector
+				result.push_back(next);
+				next.clear();
+			}
 		}
 		else {
-			return false;
+			// Accumulate the next character into the sequence
+			next += *it;
 		}
 	}
+	if (!next.empty())
+		result.push_back(next);
+	return result;
+}
 
-	string ReplaceAll(std::string str, const std::string& from, const std::string& to) {
-		size_t start_pos = 0;
-		while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
-			str.replace(start_pos, from.length(), to);
-			start_pos += to.length(); // Handles case where 'to' is a substring of 'from'
-		}
-		return str;
-	}
-
-
-
-	void ResetGame() {
-		LoadSceneParameters p = { 0 };
-		p.LoadSceneMode = 0; //Single
-		p.LocalPhysicsMode = 0;
-		LoadScene(il2cpp_string_new(string("_Boot").data()), &p);
-	}
-
-
-
-	void* s2c_orig = nullptr;
-	Il2CppChar* s2c_hook(void* _this)
+void meterDataSendThread() {
+	printf("meterDataSendThread IN!!!\n");
+	while (true)
 	{
-
-		Il2CppChar* ret = reinterpret_cast<decltype(s2c_hook)*>(s2c_orig)(_this);
-
-		return ret;
-
-	}
-
-	string UmaGetString(Il2CppString_unk* in, int debug = 1) {
-		string out = "";
-		long long length = s2c_hook(in)->length;
-		//printf("length is %d\n", length);
-		short* start = &(s2c_hook(in)->start_char);
-		//printf("start is %p\n", start);
-		for (int i = 0; i <= length - 1; i++) {
-			if (debug == 1) {
-				printf("Text is %p\n", *start);
-			}
-			out += *(start++);
-		}
-		return out;
-	}
-
-	std::vector < std::string > explode(const std::string& str,
-		const char& ch) {
-		std::string next;
-		std::vector < std::string > result;
-
-		// For each character in the string
-		for (std::string::const_iterator it = str.begin(); it != str.end(); it++) {
-			// If we've hit the terminal character
-			if (*it == ch) {
-				// If we have some characters accumulated
-				if (!next.empty()) {
-					// Add them to the result vector
-					result.push_back(next);
-					next.clear();
+		//printf("Thread Alive!!\n");
+		if (horseMeters[0] != lastMeter) {
+			char* databyte = new char[sizeof(float) * MAX_HORSE_NUM];
+			int byteAdded = 0;
+			for (int i = 0; i < MAX_HORSE_NUM; i++) {
+				char* p = reinterpret_cast<char*>(&horseMeters[i]);
+				for (int k = 0; k < sizeof(float); k++)
+				{
+					databyte[byteAdded + k] = p[k];
+					//printf("p[%d]=0x%02X\n", k, p[k]);
 				}
+				byteAdded += sizeof(float);
+			}
+			httplib::Client cli(g_sett->serverIP, g_sett->serverPort);
+			std::string data(databyte, sizeof(float) * MAX_HORSE_NUM);
+			auto res = cli.Post("/Mdataup", data, "application/binary");
+			delete[] databyte;
+			lastMeter = horseMeters[0];
+			
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	
+	}
+	
+	
+}
+
+void keyDownCheckThread() {
+	printf("KeyDownCheckThread IN!!!\n");
+	
+	while (true) {
+		bool ret = GetKeyDown(KeyCode::S); //S
+		bool ctrl = GetKey(KeyCode::LeftControl); //LCtrl
+		bool alt = GetKey(KeyCode::LeftAlt);
+		bool f12 = GetKeyDown(KeyCode::F12);
+		bool f10 = GetKeyDown(KeyCode::F10);
+		bool f11 = GetKeyDown(KeyCode::F11);
+		if (ret) {
+			printf("S is Pressed!!!!\n");
+			while (GetKeyDown(KeyCode::S)) { }
+
+			sett->stopLiveCam = !sett->stopLiveCam;
+			printf("LiveCam Stop %s.\n",sett->stopLiveCam ? "Enabled" : "Disabled");
+			if (sett->stopLiveCam) {
+				toastImGui = true;
+				toastMessage = (char*)"라이브 카메라를 정지했습니다.";
 			}
 			else {
-				// Accumulate the next character into the sequence
-				next += *it;
+				toastImGui = true;
+				toastMessage = (char*)"라이브 카메라를 다시 움직입니다.";
 			}
+
 		}
-		if (!next.empty())
-			result.push_back(next);
-		return result;
-	}
-
-	void meterDataSendThread() {
-		printf("meterDataSendThread IN!!!\n");
-		while (true)
-		{
-			//printf("Thread Alive!!\n");
-			if (horseMeters[0] != lastMeter) {
-				char* databyte = new char[sizeof(float) * MAX_HORSE_NUM];
-				int byteAdded = 0;
-				for (int i = 0; i < MAX_HORSE_NUM; i++) {
-					char* p = reinterpret_cast<char*>(&horseMeters[i]);
-					for (int k = 0; k < sizeof(float); k++)
-					{
-						databyte[byteAdded + k] = p[k];
-						//printf("p[%d]=0x%02X\n", k, p[k]);
-					}
-					byteAdded += sizeof(float);
-				}
-				httplib::Client cli(server_ip, server_port);
-				std::string data(databyte, sizeof(float) * MAX_HORSE_NUM);
-				auto res = cli.Post("/Mdataup", data, "application/binary");
-				delete[] databyte;
-				lastMeter = horseMeters[0];
-				
-			}
-			std::this_thread::sleep_for(std::chrono::milliseconds(100));
-		
-		}
-		
-		
-	}
-
-	void keyDownCheckThread() {
-		printf("KeyDownCheckThread IN!!!\n");
-		
-		while (true) {
-			bool ret = GetKeyDown(KeyCode::S); //S
-			bool ctrl = GetKey(KeyCode::LeftControl); //LCtrl
-			bool alt = GetKey(KeyCode::LeftAlt);
-			bool f12 = GetKeyDown(KeyCode::F12);
-			if (ret) {
-				printf("S is Pressed!!!!\n");
-				while (GetKeyDown(KeyCode::S)) { }
-
-				c_stopLiveCam = !c_stopLiveCam;
-				printf("LiveCam Stop %s.\n",c_stopLiveCam ? "Enabled" : "Disabled");
-				if (c_stopLiveCam) {
-					toastImGui = true;
-					toastMessage = (char*)"라이브 카메라를 정지했습니다.";
-				}
-				else {
-					toastImGui = true;
-					toastMessage = (char*)"라이브 카메라를 다시 움직입니다.";
-				}
-
-			}
-			if (ctrl) {
-				printf("LCtrl is pressed!!!!!\n");
-				while (ctrl) {	
-					//printf("check R\n");
-					if (GetKeyDown(KeyCode::R)) {
-						printf("Lctrl + R pressed, reset game\n");
-						ResetGame();
-						while (GetKey(KeyCode::R));
-						break;
-					} //R
-					else if (GetKeyDown(KeyCode::P)) { //P
-						if (get_TimeScale() <= 0.0) {
-							set_TimeScale(1.0);
-						}
-						else {
-							set_TimeScale(0.0);
-						}
-						printf("Lctrl + P pressed, Set game TimeScale to %.2f\n",get_TimeScale());
-						while (GetKey(KeyCode::P));
-						break;
-					}
-					else if (GetKey(KeyCode::PageUp)) {
-						set_TimeScale(get_TimeScale() + 0.05);
-						printf("Set Timescale %.2f\n", get_TimeScale());
-						Sleep(100);
-						//while (GetKey(KeyCode::PageUp));
-						//break;
-					}
-					else if (GetKey(KeyCode::PageDown)) {
-						set_TimeScale(get_TimeScale() - 0.05);
-						printf("Set Timescale %.2f\n", get_TimeScale());
-						Sleep(100);
-						//while (GetKey(KeyCode::PageDown));
-						//break;
-					}
-					else if (GetKeyDown(KeyCode::End)) {
+		if (ctrl) {
+			printf("LCtrl is pressed!!!!!\n");
+			while (ctrl) {	
+				//printf("check R\n");
+				if (GetKeyDown(KeyCode::R)) {
+					printf("Lctrl + R pressed, reset game\n");
+					ResetGame();
+					while (GetKey(KeyCode::R));
+					break;
+				} //R
+				else if (GetKeyDown(KeyCode::P)) { //P
+					if (get_TimeScale() <= 0.0) {
 						set_TimeScale(1.0);
-						printf("Reset Timescale to %.2f\n", get_TimeScale());
+					}
+					else {
+						set_TimeScale(0.0);
+					}
+					printf("Lctrl + P pressed, Set game TimeScale to %.2f\n",get_TimeScale());
+					while (GetKey(KeyCode::P));
+					break;
+				}
+				else if (GetKey(KeyCode::PageUp)) {
+					set_TimeScale(get_TimeScale() + 0.05);
+					printf("Set Timescale %.2f\n", get_TimeScale());
+					Sleep(100);
+					//while (GetKey(KeyCode::PageUp));
+					//break;
+				}
+				else if (GetKey(KeyCode::PageDown)) {
+					set_TimeScale(get_TimeScale() - 0.05);
+					printf("Set Timescale %.2f\n", get_TimeScale());
+					Sleep(100);
+					//while (GetKey(KeyCode::PageDown));
+					//break;
+				}
+				else if (GetKeyDown(KeyCode::End)) {
+					set_TimeScale(1.0);
+					printf("Reset Timescale to %.2f\n", get_TimeScale());
+					toastImGui = true;
+					toastMessage = (char*)"배속을 1.0으로 초기화했습니다.";
+					while (GetKey(KeyCode::PageDown));
+					break;
+				}
+				else if (GetKey(KeyCode::LeftArrow)) {
+					if (!sett->isLiveTimeManual) {
+						sett->isLiveTimeManual = true;
 						toastImGui = true;
-						toastMessage = (char*)"배속을 1.0으로 초기화했습니다.";
-						while (GetKey(KeyCode::PageDown));
-						break;
+						toastMessage = (char*)"라이브 타임라인 수동 조작이 활성화 되었습니다.";
 					}
-					else if (GetKey(KeyCode::LeftArrow)) {
-						if (!isLiveTimeManual) {
-							isLiveTimeManual = true;
-							toastImGui = true;
-							toastMessage = (char*)"라이브 타임라인 수동 조작이 활성화 되었습니다.";
-						}
-						
-						if (liveTimeSec <= 0.0) 
-						{ 
-							liveTimeSec = 0.0; 
-						}
-						else {
-							liveTimeSec = liveTimeSec - liveTimelineManualScale;
-						}
-						
-						printf("set liveTime Second to %.4f\n", liveTimeSec);
-						Sleep(1);
-					}
-					else if (GetKey(KeyCode::RightArrow)) {
-						if (!isLiveTimeManual) {
-							isLiveTimeManual = true;
-							toastImGui = true;
-							toastMessage = (char*)"라이브 타임라인 수동 조작이 활성화 되었습니다.";
-						}
-						liveTimeSec = liveTimeSec + liveTimelineManualScale;
-						printf("set liveTime Second to %.4f\n", liveTimeSec);
-						Sleep(1);
-					}
-					ctrl = GetKey(KeyCode::LeftControl);
-				}
-			}
-			if (f12) {
-				printf("F12 is Pressed!!!!\n");
-				while (GetKeyDown(KeyCode::F12)) {}
-
-				//bool b = ShowWindow(imguiWnd, imguiShow ? SW_HIDE : SW_SHOW);
-				//imguiShow = !imguiShow;
-				imgui_settingwnd_open = !imgui_settingwnd_open;
-				printf("Show setting screen \n");
-			}
-
-			/*else if (alt) {
-				printf("LAlt is pressed!!!!!\n");
-				while (alt) {
 					
-					alt = GetKey(KeyCode::LeftAlt);
+					if (liveTimeSec <= 0.0) 
+					{ 
+						liveTimeSec = 0.0; 
+					}
+					else {
+						liveTimeSec = liveTimeSec - liveTimelineManualScale;
+					}
+					
+					printf("set liveTime Second to %.4f\n", liveTimeSec);
+					Sleep(1);
 				}
-								
-			}*/
-			//std::this_thread::sleep_for(std::chrono::milliseconds(5));
+				else if (GetKey(KeyCode::RightArrow)) {
+					if (!sett->isLiveTimeManual) {
+						sett->isLiveTimeManual = true;
+						toastImGui = true;
+						toastMessage = (char*)"라이브 타임라인 수동 조작이 활성화 되었습니다.";
+					}
+					liveTimeSec = liveTimeSec + liveTimelineManualScale;
+					printf("set liveTime Second to %.4f\n", liveTimeSec);
+					Sleep(1);
+				}
+				ctrl = GetKey(KeyCode::LeftControl);
+			}
 		}
+		if (f12) {
+			printf("F12 is Pressed!!!!\n");
+			while (GetKeyDown(KeyCode::F12)) {}
+
+			//bool b = ShowWindow(imguiWnd, imguiShow ? SW_HIDE : SW_SHOW);
+			//imguiShow = !imguiShow;
+			imgui_settingwnd_open = !imgui_settingwnd_open;
+			printf("Show setting screen \n");
+		}
+		if (f10) {
+			printf("F10 is Pressed!!!!\n");
+			while (GetKeyDown(KeyCode::F10)) {}
+			g_sett->isShowLivePerfInfo = !g_sett->isShowLivePerfInfo;
+			//printf("%d\n", g_sett->isShowLivePerfInfo);
+		}
+		if (f11) {
+			printf("F11 is Pressed!!!!\n");
+			while (GetKeyDown(KeyCode::F11)) {}
+			g_sett->isShowLiveFPSGraph = !g_sett->isShowLiveFPSGraph;
+		}
+		/*else if (alt) {
+			printf("LAlt is pressed!!!!!\n");
+			while (alt) {
+				
+				alt = GetKey(KeyCode::LeftAlt);
+			}
+							
+		}*/
+		//std::this_thread::sleep_for(std::chrono::milliseconds(5));
 	}
-	char* readAllFileBytes(const char* name)
-	{
-		ifstream fl(name);
-		fl.seekg(0, ios::end);
-		size_t len = fl.tellg();
-		char* ret = new char[len];
-		fl.seekg(0, ios::beg);
-		fl.read(ret, len);
-		fl.close();
-		return ret;
-	}
-	wstring readFileIntoString(const string& path) {
+}
+char* readAllFileBytes(const char* name)
+{
+	ifstream fl(name);
+	fl.seekg(0, ios::end);
+	size_t len = fl.tellg();
+	char* ret = new char[len];
+	fl.seekg(0, ios::beg);
+	fl.read(ret, len);
+	fl.close();
+	return ret;
+}
+wstring readFileIntoString(const string& path) {
 		ifstream input_file(path);
 		if (!input_file.is_open()) {
 			cerr << "Could not open the file - '"
@@ -349,8 +374,8 @@ using namespace std;
 		}
 		return wstring((std::istreambuf_iterator<char>(input_file)), std::istreambuf_iterator<char>());
 	}
-	bool isSubset(char arr1[], char arr2[],
-		int m, int n)
+bool isSubset(char arr1[], char arr2[],
+	int m, int n)
 	{
 		int i = 0;
 		int j = 0;
@@ -372,38 +397,38 @@ using namespace std;
 		in arr1[] */
 		return 1;
 	}
+
+void path_game_assembly();
+void bootstrap_carrot_juicer();
+
+bool mh_inited = false;
+vector<void*> enabled_hooks;
+
+void deleteDirectoryContents(const std::string& dir_path)
+{
+	for (const auto& entry : std::filesystem::directory_iterator(dir_path))
+		std::filesystem::remove_all(entry.path());
+}
+void dump_bytes(void* pos)
+{
+	printf("Hex dump of %p\n", pos);
+
+	char* memory = reinterpret_cast<char*>(pos);
 	
-	void path_game_assembly();
-	void bootstrap_carrot_juicer();
-
-	bool mh_inited = false;
-	vector<void*> enabled_hooks;
-
-	void deleteDirectoryContents(const std::string& dir_path)
+	for (int i = 0; i < 0x20; i++)
 	{
-		for (const auto& entry : std::filesystem::directory_iterator(dir_path))
-			std::filesystem::remove_all(entry.path());
-	}
-	void dump_bytes(void* pos)
-	{
-		printf("Hex dump of %p\n", pos);
+		if (i > 0 && i % 16 == 0)
+			printf("\n");
 
-		char* memory = reinterpret_cast<char*>(pos);
+		char byte = *(memory++);
 		
-		for (int i = 0; i < 0x20; i++)
-		{
-			if (i > 0 && i % 16 == 0)
-				printf("\n");
-
-			char byte = *(memory++);
-			
-			printf("%02hhX ", byte);
-		}
-
-		printf("\n\n");
+		printf("%02hhX ", byte);
 	}
 
-	bool SaveFrameBufferToFile(ID3D11Device* pDevice, const std::string& filePath)
+	printf("\n\n");
+}
+
+bool SaveFrameBufferToFile(ID3D11Device* pDevice, const std::string& filePath)
 	{
 		// 프레임 버퍼의 크기와 형식을 가져옵니다.
 		ID3D11DeviceContext* pDeviceContext;
@@ -618,9 +643,9 @@ using namespace std;
 		return true;
 	}
 
-	int (*ObscuredInt_Decrypted)(ObscuredInt*) = nullptr;
-	void* load_library_w_orig = nullptr;
-	HMODULE __stdcall load_library_w_hook(const wchar_t* path)
+int (*ObscuredInt_Decrypted)(ObscuredInt*) = nullptr;
+void* load_library_w_orig = nullptr;
+HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 	{
 		wprintf(L"loaded %s\n", path);
 		// GameAssembly.dll code must be loaded and decrypted while loading criware library
@@ -652,7 +677,7 @@ using namespace std;
 			SetWindowText(currenthWnd, buf);
 			hook_end = true;
 			//GameAssembly ´ýÇÁ
-			if (g_dumpGamedll) {
+			if (g_sett->dumpGameassembly) {
 				HMODULE ga = GetModuleHandle(L"GameAssembly.dll");
 				if (ga != nullptr) {
 					//std::string exe_name = module_filename(NULL);
@@ -825,14 +850,14 @@ using namespace std;
 	void* set_fps_orig = nullptr;
 	void set_fps_hook(int value)
 	{
-		if (g_autofps) {
-			g_max_fps = getCurrentDisplayHz();
-			printf("Auto fps limit setted : %d fps\n", g_max_fps);		
+		if (g_sett->autoFpsSet) {
+			g_sett->maxFps = getCurrentDisplayHz();
+			printf("Auto fps limit setted : %d fps\n", g_sett->maxFps);
 		}
 		else {
-			printf("fps limit setted : %d fps\n", g_max_fps);
+			printf("fps limit setted : %d fps\n", g_sett->maxFps);
 		}
-		value = g_max_fps;
+		value = g_sett->maxFps;
 		return reinterpret_cast<decltype(set_fps_hook)*>(set_fps_orig)(value);
 		
 	}
@@ -909,7 +934,7 @@ using namespace std;
 	void* FadeGui_SetAlpha_orig = nullptr;
 	void FadeGui_SetAlpha_hook(Il2CppObject* _this, float alpha) {
 		
-		if (!g_showLiveTitleWindow) {
+		if (!g_sett->showLiveTitleWindow) {
 			alpha = 0.0f;
 		}
 
@@ -977,11 +1002,10 @@ using namespace std;
 	void RaceUIRank_Setup_hook(void* _this,int index, int indexMax, void* displayTarget, void* distanceCheckTarget, int horseNum, float showDistance, float hideDistance) {
 		printf("RaceUIRank_Setup index=%d, indexMax=%d, horseNum=%d, showDist=%5f, hideDist=%5f\n"
 			, index, indexMax, horseNum, showDistance, hideDistance);
-		race_Currentrank = horseNum-5;
+		race_Currentrank = horseNum - 5;
 		race_MaxRank = horseNum;
 		return reinterpret_cast<decltype(RaceUIRank_Setup_hook)*>
-			(RaceUIRank_Setup_orig)(_this, index, indexMax, displayTarget, distanceCheckTarget, horseNum, 
-				g_rankUIShowMeter < 0? 0.0f: g_rankUIShowMeter, hideDistance+g_rankUIHideoffset);
+			(RaceUIRank_Setup_orig)(_this, index, indexMax, displayTarget, distanceCheckTarget, horseNum, ((g_sett->rankUIShowMeter < 0) ? 0.0f : g_sett->rankUIShowMeter), (hideDistance + g_sett->rankUIHideoffset));
 	}
 
 	void* RaceUIRank_PlayPlayerRankUp_orig = nullptr;
@@ -1029,7 +1053,7 @@ using namespace std;
 	void* LiveTheaterInfo_CheckDress_orig = nullptr;
 	void LiveTheaterInfo_CheckDress_hook(void* _this, int index, CharaDressIdSet* idset) {
 		printf("LiveTheaterInfo_CheckDress called index=%d, charaid=%d\n",index,idset->_charaId);
-		if (g_liveCharaAutoDressReplace) {
+		if (g_sett->liveCharaAutoDressReplace) {
 			return reinterpret_cast<decltype(LiveTheaterInfo_CheckDress_hook)*>
 				(LiveTheaterInfo_CheckDress_orig)(_this, index, idset);
 		}
@@ -1078,33 +1102,33 @@ using namespace std;
 		printf("CharacterBuildInfo_ctor called origcharaid=%d, origdressid=%d, mini=%d\n", charaId, dressId,_this->_miniMobParentCharaId);
 		
 		//if(_this.)
-		if (g_homeAllDiamond) {
+		if (g_sett->homeAllDiamond) {
 			charaId = 1067;
 			dressId = 106701;
 			headId = 0;
 		}
 		else {
-			if (c_gachaCutinChara > -1) {
+			if (sett->gachaCutinChara > -1) {
 				/*if (charaId == 9001)
 					charaId = 9002;*/
 					//else
-				_this->_charaId = c_gachaCutinChara;
-				charaId = c_gachaCutinChara;
+				_this->_charaId = sett->gachaCutinChara;
+				charaId = sett->gachaCutinChara;
 			}
-			if (c_gachaCutinDress > -1) {
+			if (sett->gachaCutinDress > -1) {
 				/*if (dressId == 900101)
 					dressId = 900201;*/
 					//else
 
-				_this->_dressId = c_gachaCutinDress;
-				dressId = c_gachaCutinDress;
+				_this->_dressId = sett->gachaCutinDress;
+				dressId = sett->gachaCutinDress;
 			}
-			if (c_gachaCutinHeadid > -1) {
-				_this->_headModelSubId = c_gachaCutinHeadid;
-				headId = c_gachaCutinHeadid;
+			if (sett->gachaCutinHeadid > -1) {
+				_this->_headModelSubId = sett->gachaCutinHeadid;
+				headId = sett->gachaCutinHeadid;
 			}
 		}
-		
+		//controllerType = 0x0c;
 
 		printf("CharacterBuildInfo_ctor called ccharaid=%d, cdressid=%d\n", charaId, dressId);
 		//charaId = 1070;
@@ -1119,14 +1143,14 @@ using namespace std;
 	void CharacterBuildInfo_ctor_overload1_hook(CharacterBuildInfo* src) {
 		printf("CharacterBuildInfo_ctor_overload1 called charaid=%d, dressid=%d\n", src->_charaId, src->_dressId);
 
-		if (c_gachaCutinChara > -1) {
-			src->_charaId = c_gachaCutinChara;
+		if (sett->gachaCutinChara > -1) {
+			src->_charaId = sett->gachaCutinChara;
 		}
-		if (c_gachaCutinDress > -1) {
-			src->_dressId = c_gachaCutinDress;
+		if (sett->gachaCutinDress > -1) {
+			src->_dressId = sett->gachaCutinDress;
 		}
-		if (c_gachaCutinHeadid > -1) {
-			src->_headModelSubId = c_gachaCutinHeadid;
+		if (sett->gachaCutinHeadid > -1) {
+			src->_headModelSubId = sett->gachaCutinHeadid;
 		}
 		printf("CharacterBuildInfo_ctor_overload1 called ccharaid=%d, cdressid=%d\n", src->_charaId, src->_dressId);
 		return reinterpret_cast<decltype(CharacterBuildInfo_ctor_overload1_hook)*>
@@ -1142,14 +1166,14 @@ using namespace std;
 		int audienceId = 0, int motionDressId = -1, bool isEnableModelCache = true) {
 		printf("CharacterBuildInfo_ctor2 called origcharaid=%d, origdressid=%d\n", charaId, dressId);
 
-		if (c_gachaCutinChara > -1) {
-			charaId = c_gachaCutinChara;
+		if (sett->gachaCutinChara > -1) {
+			charaId = sett->gachaCutinChara;
 		}
-		if (c_gachaCutinDress > -1) {
-			dressId = c_gachaCutinDress;
+		if (sett->gachaCutinDress > -1) {
+			dressId = sett->gachaCutinDress;
 		}
-		if (c_gachaCutinHeadid > -1) {
-			headId = c_gachaCutinHeadid;
+		if (sett->gachaCutinHeadid > -1) {
+			headId = sett->gachaCutinHeadid;
 		}
 
 		printf("CharacterBuildInfo_ctor2 called ccharaid=%d, cdressid=%d\n", charaId, dressId);
@@ -1173,10 +1197,12 @@ using namespace std;
 		clothId = 5;
 		headId = 0;
 		printf("%d\n", charaId);*/
+		
 
-		if (c_changeStoryChar) 
+
+		if (sett->changeStoryChar) 
 		{
-			if ((c_story3dCharID < 0) || (c_story3dClothID < 0) || (c_story3dHeadID < 0) || (c_story3dMobid < 0))
+			if ((sett->story3dCharID < 0) || (sett->story3dClothID < 0) || (sett->story3dHeadID < 0) || (sett->story3dMobid < 0))
 			{
 				std::string line;
 				while (true) {
@@ -1222,10 +1248,10 @@ using namespace std;
 			}
 			else 
 			{
-				charaId = c_story3dCharID;
-				clothId = c_story3dClothID;
-				mobId = c_story3dMobid;
-				headId = c_story3dHeadID;
+				charaId = sett->story3dCharID;
+				clothId = sett->story3dClothID;
+				mobId = sett->story3dMobid;
+				headId = sett->story3dHeadID;
 				printf("story3d set %d %d %d %d\n", charaId, clothId, mobId, headId);
 			}
 		}
@@ -1250,8 +1276,8 @@ using namespace std;
 		url_conv.assign(url_raw.begin(), url_raw.end());
 		Url posturl(url_conv);
 		currentUrl = posturl;
-		if (strlen(g_customHost) > 0) {
-			Url replaceUrl(g_customHost);
+		if (strlen(g_sett->customHost) > 0) {
+			Url replaceUrl(g_sett->customHost);
 			posturl.scheme(replaceUrl.scheme());
 			posturl.host(replaceUrl.host());
 			posturl.port(replaceUrl.port());
@@ -1301,8 +1327,8 @@ using namespace std;
 	void* RaceResultScene_GetMotionVariationId_orig = nullptr;
 	int RaceResultScene_GetMotionVariationId_hook(int charaId) {
 		printf("GetMotionVariationId : charaId=%d\n", charaId);
-		if (c_raceResultCutinMotionChara > -1) {
-			charaId = c_raceResultCutinMotionChara;
+		if (sett->raceResultCutinMotionChara > -1) {
+			charaId = sett->raceResultCutinMotionChara;
 			//dress->CharaId = c_raceResultCutinMotionChara;
 		}
 		return reinterpret_cast<decltype(RaceResultScene_GetMotionVariationId_hook)*>
@@ -1317,10 +1343,10 @@ using namespace std;
 	}
 
 	void* RaceResultCutInHelper_LoadBodyMotion_orig = nullptr;
-	void* RaceResultCutInHelper_LoadBodyMotion_hook(int characterId, MasterDressData* dress, int personalityType, int rank, int grade, int raceType, void* resultSwapData) {
+	void* RaceResultCutInHelper_LoadBodyMotion_hook(int characterId, MasterDressData* dress, int personalityType, int rank, int grade, int raceType, void* resultSwapData, void* resultSwapMotionData) {
 		
 		printf("RaceResultCutInHelper_LoadBodyMotion: charaId=%d,dressid=%d,rank=%d,grade=%d\n",characterId, dress->Id,rank,grade);
-		if (g_winMotion564) {
+		if (g_sett->winMotion564) {
 			characterId = 1007;
 			dress->CharaId = 1007;
 			dress->Id = 100701;
@@ -1328,18 +1354,18 @@ using namespace std;
 			//c_raceResultCutinMotionRank = rank;
 		}
 		else {
-			if (c_raceResultCutinMotionChara > -1) {
-				characterId = c_raceResultCutinMotionChara;
-				dress->CharaId = c_raceResultCutinMotionChara;
+			if (sett->raceResultCutinMotionChara > -1) {
+				characterId = sett->raceResultCutinMotionChara;
+				dress->CharaId = sett->raceResultCutinMotionChara;
 			}
-			if (c_raceResultCutinMotionDress > -1) {
-				dress->Id = c_raceResultCutinMotionDress;
+			if (sett->raceResultCutinMotionDress > -1) {
+				dress->Id = sett->raceResultCutinMotionDress;
 			}
-			if (c_raceResultCutinMotionGrade > -1) {
-				grade = c_raceResultCutinMotionGrade;
+			if (sett->raceResultCutinMotionGrade > -1) {
+				grade = sett->raceResultCutinMotionGrade;
 			}
-			if (c_raceResultCutinMotionRank > -1) {
-				rank = c_raceResultCutinMotionRank;
+			if (sett->raceResultCutinMotionRank > -1) {
+				rank = sett->raceResultCutinMotionRank;
 			}
 		}
 		
@@ -1347,11 +1373,11 @@ using namespace std;
 		
 		//return nullptr;
 		return reinterpret_cast<decltype(RaceResultCutInHelper_LoadBodyMotion_hook)*>
-			(RaceResultCutInHelper_LoadBodyMotion_orig)(characterId, dress, personalityType, rank, grade, raceType, resultSwapData);
+			(RaceResultCutInHelper_LoadBodyMotion_orig)(characterId, dress, personalityType, rank, grade, raceType, resultSwapData, resultSwapMotionData);
 	}
 
 	void* RaceResultCutInHelper_LoadCameraMotion_orig = nullptr;
-	void* RaceResultCutInHelper_LoadCameraMotion_hook(int characterId, MasterDressData* dress, int personalityType, int rank, int grade, int raceType) {
+	void* RaceResultCutInHelper_LoadCameraMotion_hook(int characterId, MasterDressData* dress, int personalityType, int rank, int grade, int raceType, void* resultSwapData, void* resultSwapMotionData) {
 		//printf("RaceResultCutInHelper_LoadCameraMotion: charaId=%d,dressid=%d,rank=%d,grade=%d\n", characterId, dress->Id, rank, grade);
 		printf("characterId: %d\n", characterId);
 		printf("dress:\n");
@@ -1386,7 +1412,7 @@ using namespace std;
 		printf("grade: %d\n", grade);
 		printf("raceType: %d\n", raceType);
 		//return nullptr;
-		if (g_winMotion564) {
+		if (g_sett->winMotion564) {
 			characterId = 1007;
 			dress->CharaId = 1007;
 			dress->Id = 100701;
@@ -1394,23 +1420,25 @@ using namespace std;
 			//c_raceResultCutinMotionRank = rank;
 		}
 		else {
-			if (c_raceResultCutinMotionChara > -1) {
-				characterId = c_raceResultCutinMotionChara;
-				dress->CharaId = c_raceResultCutinMotionChara;
+			if (sett->raceResultCutinMotionChara > -1) {
+				characterId = sett->raceResultCutinMotionChara;
+				dress->CharaId = sett->raceResultCutinMotionChara;
 			}
-			if (c_raceResultCutinMotionDress > -1) {
-				dress->Id = c_raceResultCutinMotionDress;
+			if (sett->raceResultCutinMotionDress > -1) {
+				dress->Id = sett->raceResultCutinMotionDress;
 			}
-			if (c_raceResultCutinMotionGrade > -1) {
-				grade = c_raceResultCutinMotionGrade;
+			if (sett->raceResultCutinMotionGrade > -1) {
+				grade = sett->raceResultCutinMotionGrade;
 			}
-			if (c_raceResultCutinMotionRank > -1) {
-				rank = c_raceResultCutinMotionRank;
+			if (sett->raceResultCutinMotionRank > -1) {
+				rank = sett->raceResultCutinMotionRank;
 			}
 		}
 
 		void* ret = reinterpret_cast<decltype(RaceResultCutInHelper_LoadCameraMotion_hook)*>
-			(RaceResultCutInHelper_LoadCameraMotion_orig)(characterId, dress, personalityType, rank, grade, raceType);
+			(RaceResultCutInHelper_LoadCameraMotion_orig)(
+					characterId, dress, personalityType, rank, grade, raceType, resultSwapData, resultSwapMotionData
+				);
 		printf("LoadCameraMotion ret=%p\n", ret);
 		return ret;
 	}
@@ -1419,7 +1447,7 @@ using namespace std;
 	void* RaceResultCutInHelper_LoadEarMotion_hook(int characterId, MasterDressData* dress, int personalityType, int rank, int grade, int raceType) {
 		printf("RaceResultCutInHelper_LoadEarMotion: charaId=%d,dressid=%d,rank=%d,grade=%d\n", characterId, dress->Id, rank, grade);
 		//return nullptr;
-		if (g_winMotion564) {
+		if (g_sett->winMotion564) {
 			characterId = 1007;
 			dress->CharaId = 1007;
 			dress->Id = 100701;
@@ -1427,18 +1455,18 @@ using namespace std;
 			//c_raceResultCutinMotionRank = rank;
 		}
 		else {
-			if (c_raceResultCutinMotionChara > -1) {
-				characterId = c_raceResultCutinMotionChara;
-				dress->CharaId = c_raceResultCutinMotionChara;
+			if (sett->raceResultCutinMotionChara > -1) {
+				characterId = sett->raceResultCutinMotionChara;
+				dress->CharaId = sett->raceResultCutinMotionChara;
 			}
-			if (c_raceResultCutinMotionDress > -1) {
-				dress->Id = c_raceResultCutinMotionDress;
+			if (sett->raceResultCutinMotionDress > -1) {
+				dress->Id = sett->raceResultCutinMotionDress;
 			}
-			if (c_raceResultCutinMotionGrade > -1) {
-				grade = c_raceResultCutinMotionGrade;
+			if (sett->raceResultCutinMotionGrade > -1) {
+				grade = sett->raceResultCutinMotionGrade;
 			}
-			if (c_raceResultCutinMotionRank > -1) {
-				rank = c_raceResultCutinMotionRank;
+			if (sett->raceResultCutinMotionRank > -1) {
+				rank = sett->raceResultCutinMotionRank;
 			}
 		}
 		
@@ -1450,7 +1478,7 @@ using namespace std;
 	void* RaceResultCutInHelper_LoadFacialMotion_hook(int characterId, MasterDressData* dress, int personalityType, int rank, int grade, int raceType) {
 		printf("RaceResultCutInHelper_LoadFacialMotion: charaId=%d,dressid=%d,rank=%d,grade=%d\n", characterId, dress->Id, rank, grade);
 		//return nullptr;
-		if (g_winMotion564) {
+		if (g_sett->winMotion564) {
 			characterId = 1007;
 			dress->CharaId = 1007;
 			dress->Id = 100701;
@@ -1458,18 +1486,18 @@ using namespace std;
 			//c_raceResultCutinMotionRank = rank;
 		}
 		else {
-			if (c_raceResultCutinMotionChara > -1) {
-				characterId = c_raceResultCutinMotionChara;
-				dress->CharaId = c_raceResultCutinMotionChara;
+			if (sett->raceResultCutinMotionChara > -1) {
+				characterId = sett->raceResultCutinMotionChara;
+				dress->CharaId = sett->raceResultCutinMotionChara;
 			}
-			if (c_raceResultCutinMotionDress > -1) {
-				dress->Id = c_raceResultCutinMotionDress;
+			if (sett->raceResultCutinMotionDress > -1) {
+				dress->Id = sett->raceResultCutinMotionDress;
 			}
-			if (c_raceResultCutinMotionGrade > -1) {
-				grade = c_raceResultCutinMotionGrade;
+			if (sett->raceResultCutinMotionGrade > -1) {
+				grade = sett->raceResultCutinMotionGrade;
 			}
-			if (c_raceResultCutinMotionRank > -1) {
-				rank = c_raceResultCutinMotionRank;
+			if (sett->raceResultCutinMotionRank > -1) {
+				rank = sett->raceResultCutinMotionRank;
 			}
 		}
 	
@@ -1509,24 +1537,24 @@ using namespace std;
 		printf("CutinCharacter type=%d charaid=%d dressid=%d, headid=%d, is어쩌구=%d, index=%d\n",
 			createInfo->_characterType,createInfo->_charaId,createInfo->_clothId,createInfo->_headId, createInfo->IsUseDressDataHeadModelSubId,createInfo->_charaIndex);
 		
-		if (g_homeAllDiamond) {
+		if (g_sett->homeAllDiamond) {
 			createInfo->_characterType = (TimelineKeyCharacterType)-1;
 			createInfo->_charaId = 1067;
 			createInfo->_clothId = 106701;
 			createInfo->_headId = 0;
 		}
 		else {
-			if (c_gachaCharaType > -1) {
-				createInfo->_characterType = c_gachaCharaType;
+			if (sett->gachaCharaType > -1) {
+				createInfo->_characterType = sett->gachaCharaType;
 			}
-			if (c_gachaCutinChara > -1) {
-				createInfo->_charaId = c_gachaCutinChara;
+			if (sett->gachaCutinChara > -1) {
+				createInfo->_charaId = sett->gachaCutinChara;
 			}
-			if (c_gachaCutinDress > -1) {
-				createInfo->_clothId = c_gachaCutinDress;
+			if (sett->gachaCutinDress > -1) {
+				createInfo->_clothId = sett->gachaCutinDress;
 			}
-			if (c_gachaCutinHeadid > -1) {
-				createInfo->_headId = c_gachaCutinHeadid;
+			if (sett->gachaCutinHeadid > -1) {
+				createInfo->_headId = sett->gachaCutinHeadid;
 			}
 		}
 		
@@ -1566,24 +1594,24 @@ using namespace std;
 	void* CutInHelper_OnCreateCharacterModel_hook(void* _this, CutInCharacterCreateInfo* info) {
 		printf("CutInHelper_OnCreateCharacterModel called origType=%d, origcharaid=%d\n",info->_characterType, info->_charaId );
 
-		if (g_homeAllDiamond) {
+		if (g_sett->homeAllDiamond) {
 			info->_characterType = (TimelineKeyCharacterType)-1;
 			info->_charaId = 1067;
 			info->_clothId = 106701;
 			info->_headId = 0;
 		}
 		else {
-			if (c_gachaCharaType > -1) {
-				info->_characterType = c_gachaCharaType;
+			if (sett->gachaCharaType > -1) {
+				info->_characterType = sett->gachaCharaType;
 			}
-			if (c_gachaCutinChara > -1) {
-				info->_charaId = c_gachaCutinChara;
+			if (sett->gachaCutinChara > -1) {
+				info->_charaId = sett->gachaCutinChara;
 			}
-			if (c_gachaCutinDress > -1) {
-				info->_clothId = c_gachaCutinDress;
+			if (sett->gachaCutinDress > -1) {
+				info->_clothId = sett->gachaCutinDress;
 			}
-			if (c_gachaCutinHeadid > -1) {
-				info->_headId = c_gachaCutinHeadid;
+			if (sett->gachaCutinHeadid > -1) {
+				info->_headId = sett->gachaCutinHeadid;
 			}
 		}
 		
@@ -1624,7 +1652,7 @@ using namespace std;
 	void* Live_LiveTimelineCamera_AlterUpdate_orig = nullptr;
 	void Live_LiveTimelineCamera_AlterUpdate_hook(void* _this, float liveTime) {
 		//printf("Livecam AlterUpdate time=%.5f\n",liveTime);
-		if (!c_stopLiveCam) {
+		if (!sett->stopLiveCam) {
 			return reinterpret_cast<decltype(Live_LiveTimelineCamera_AlterUpdate_hook)*>
 				(Live_LiveTimelineCamera_AlterUpdate_orig)(_this, liveTime);
 		}
@@ -1633,7 +1661,7 @@ using namespace std;
 
 	void* Live_Cutt_AlterUpdate_CameraLookAt_orig = nullptr;
 	void Live_Cutt_AlterUpdate_CameraLookAt_hook(void* _this, void* sheet, int currentFrame, float currentTime, Vector3_t* outLookAt) {
-		if (!c_stopLiveCam) {
+		if (!sett->stopLiveCam) {
 			reinterpret_cast<decltype(Live_Cutt_AlterUpdate_CameraLookAt_hook)*>
 				(Live_Cutt_AlterUpdate_CameraLookAt_orig)(_this, sheet, currentFrame, currentTime,outLookAt);
 		}
@@ -1644,7 +1672,7 @@ using namespace std;
 
 	void* Live_Cutt_AlterUpdate_CameraPos_orig = nullptr;
 	void Live_Cutt_AlterUpdate_CameraPos_hook(void* _this, void* sheet, int currentFrame, float currentTime, int sheetIndex, bool isUseCameraMotion) {
-		if (!c_stopLiveCam) {
+		if (!sett->stopLiveCam) {
 			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_CameraPos_hook)*>
 				(Live_Cutt_AlterUpdate_CameraPos_orig)(_this, sheet, currentFrame, currentTime, sheetIndex, isUseCameraMotion);
 		}
@@ -1654,7 +1682,7 @@ using namespace std;
 
 	void* Live_Cutt_AlterUpdate_CameraSwitcher_orig = nullptr;
 	void Live_Cutt_AlterUpdate_CameraSwitcher_hook(void* _this, void* sheet, int currentFrame) {
-		if (!c_stopLiveCam) {
+		if (!sett->stopLiveCam) {
 			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_CameraSwitcher_hook)*>
 				(Live_Cutt_AlterUpdate_CameraSwitcher_orig)(_this, sheet, currentFrame);
 		}
@@ -1664,7 +1692,7 @@ using namespace std;
 
 	void* Live_Cutt_AlterUpdate_CameraLayer_orig = nullptr;
 	void Live_Cutt_AlterUpdate_CameraLayer_hook(void* _this, void* sheet, int currentFrame, Vector3_t* offsetMaxPosition, Vector3_t* offsetMinPosition) {
-		if (!c_stopLiveCam) {
+		if (!sett->stopLiveCam) {
 			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_CameraLayer_hook)*>
 				(Live_Cutt_AlterUpdate_CameraLayer_orig)(_this, sheet, currentFrame,offsetMaxPosition,offsetMinPosition);
 		}
@@ -1678,7 +1706,7 @@ using namespace std;
 	void* Live_Cutt_AlterUpdate_CameraMotion_orig = nullptr;
 	void Live_Cutt_AlterUpdate_CameraMotion_hook(void* _this, void* sheet, int currentFrame) {
 		//printf("AlterUpdate_CameraMotion CurrentFrame=%d\n", currentFrame);
-		if (!c_stopLiveCam) {
+		if (!sett->stopLiveCam) {
 			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_CameraMotion_hook)*>
 				(Live_Cutt_AlterUpdate_CameraMotion_orig)(_this, sheet, currentFrame);
 		}
@@ -1688,7 +1716,7 @@ using namespace std;
 	void* Live_Cutt_AlterUpdate_CameraRoll_orig = nullptr;
 	void Live_Cutt_AlterUpdate_CameraRoll_hook(void* _this, void* sheet, int currentFrame) {
 		//printf("AlterUpdate_CameraRoll CurrentFrame=%d\n", currentFrame);
-		if (!c_stopLiveCam) {
+		if (!sett->stopLiveCam) {
 			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_CameraRoll_hook)*>
 				(Live_Cutt_AlterUpdate_CameraRoll_orig)(_this, sheet, currentFrame);
 		}
@@ -1712,7 +1740,7 @@ using namespace std;
 	void* Live_Cutt_AlterUpdate_CameraFov_orig = nullptr;
 	void Live_Cutt_AlterUpdate_CameraFov_hook(void* _this, void* sheet, int currentFrame) {
 		//printf("AlterUpdate_CameraFov CurrentFrame=%d \n", currentFrame);
-		if (!c_stopLiveCam) {
+		if (!sett->stopLiveCam) {
 			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_CameraFov_hook)*>
 				(Live_Cutt_AlterUpdate_CameraFov_orig)(_this, sheet, currentFrame);
 		}
@@ -1725,7 +1753,7 @@ using namespace std;
 			(Live_Cutt_AlterLateUpdate_CameraMotion_orig)(_this, sheet, currentFrame);*/
 
 		//printf("AlterLateUpdate_CameraMotion CurrentFrame=%d, ret=%d\n", currentFrame,ret);
-		if (!c_stopLiveCam) {
+		if (!sett->stopLiveCam) {
 			return reinterpret_cast<decltype(Live_Cutt_AlterLateUpdate_CameraMotion_hook)*>
 				(Live_Cutt_AlterLateUpdate_CameraMotion_orig)(_this, sheet, currentFrame);
 		}
@@ -1738,7 +1766,7 @@ using namespace std;
 	void* Live_Cutt_AlterUpdate_EyeCameraLookAt_orig = nullptr;
 	void Live_Cutt_AlterUpdate_EyeCameraLookAt_hook(void* _this, void* sheet, int currentFrame, float currentTime) {
 		//printf("AlterUpdate_EyeCameraLookAt CurrentFrame=%d \n", currentFrame);
-		if (!c_stopLiveCam) {
+		if (!sett->stopLiveCam) {
 			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_EyeCameraLookAt_hook)*>
 				(Live_Cutt_AlterUpdate_EyeCameraLookAt_orig)(_this, sheet, currentFrame, currentTime);
 		}
@@ -1748,7 +1776,7 @@ using namespace std;
 	void* Live_Cutt_AlterUpdate_EyeCameraPosition_orig = nullptr;
 	void Live_Cutt_AlterUpdate_EyeCameraPosition_hook(void* _this, void* sheet, int currentFrame, float currentTime) {
 		//printf("AlterUpdate_EyeCameraLookAt CurrentFrame=%d \n", currentFrame);
-		if (!c_stopLiveCam) {
+		if (!sett->stopLiveCam) {
 			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_EyeCameraPosition_hook)*>
 				(Live_Cutt_AlterUpdate_EyeCameraPosition_orig)(_this, sheet, currentFrame,currentTime);
 		}
@@ -1758,7 +1786,7 @@ using namespace std;
 	void* Live_Cutt_AlterUpdate_orig = nullptr;
 	void Live_Cutt_AlterUpdate_hook(void* _this, float liveTime) {
 		//printf("AlterUpdate time=%.2f \n", liveTime);
-		if (!c_stopLiveCam) {
+		if (!sett->stopLiveCam) {
 			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_hook)*>
 				(Live_Cutt_AlterUpdate_orig)(_this, liveTime);
 		}
@@ -1767,7 +1795,7 @@ using namespace std;
 	void* Live_Cutt_AlterUpdate_MultiCameraLookAt_orig = nullptr;
 	void Live_Cutt_AlterUpdate_MultiCameraLookAt_hook(void* _this, void* sheet, int currentFrame, float currentTime) {
 		//printf("AlterUpdate_MultiCameraLookAt currentFrame=%d \n", currentFrame);
-		if (!c_stopLiveCam) {
+		if (!sett->stopLiveCam) {
 			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_MultiCameraLookAt_hook)*>
 				(Live_Cutt_AlterUpdate_MultiCameraLookAt_orig)(_this, sheet,currentFrame, currentTime);
 		}
@@ -1776,7 +1804,7 @@ using namespace std;
 	void* Live_Cutt_AlterUpdate_MultiCameraPosition_orig = nullptr;
 	void Live_Cutt_AlterUpdate_MultiCameraPosition_hook(void* _this, void* sheet, int currentFrame, float currentTime) {
 		//printf("AlterUpdate_MultiCameraPosition currentFrame=%d \n", currentFrame);
-		if (!c_stopLiveCam) {
+		if (!sett->stopLiveCam) {
 			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_MultiCameraPosition_hook)*>
 				(Live_Cutt_AlterUpdate_MultiCameraPosition_orig)(_this, sheet, currentFrame, currentTime);
 		}
@@ -1785,7 +1813,7 @@ using namespace std;
 	void* Live_Cutt_AlterUpdate_MultiCameraTiltShift_orig = nullptr;
 	void Live_Cutt_AlterUpdate_MultiCameraTiltShift_hook(void* _this, void* sheet, int currentFrame) {
 		//printf("AlterUpdate_MultiCameraTiltShift currentFrame=%d \n", currentFrame);
-		if (!c_stopLiveCam) {
+		if (!sett->stopLiveCam) {
 			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_MultiCameraTiltShift_hook)*>
 				(Live_Cutt_AlterUpdate_MultiCameraTiltShift_orig)(_this, sheet, currentFrame);
 		}
@@ -1796,7 +1824,7 @@ using namespace std;
 		
 		//printf("AlterUpdate_PostEffect_DOF currentFrame=%d pos x=%.2f y=%.2f z=%.2f \n", currentFrame,
 			//cameraLookAt->x,cameraLookAt->y,cameraLookAt->z);
-		if (!c_stopLiveCam) {
+		if (!sett->stopLiveCam) {
 			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_PostEffect_DOF_hook)*>
 				(Live_Cutt_AlterUpdate_PostEffect_DOF_orig)(_this, sheet, currentFrame,cameraLookAt);
 		}
@@ -1826,7 +1854,7 @@ using namespace std;
 	void* GallopUtil_GotoTitleOnError_orig = nullptr;
 	void GallopUtil_GotoTitleOnError_hook(Il2CppString* text) {
 		wprintf(L"GallopUtil_GotoTitleOnError text=%s\n", wstring(text->start_char).c_str());
-		if (g_gotoTitleOnError) {
+		if (g_sett->gotoTitleOnError) {
 			return reinterpret_cast<decltype(GallopUtil_GotoTitleOnError_hook)*>
 				(GallopUtil_GotoTitleOnError_orig)(text);
 		}		
@@ -1892,8 +1920,8 @@ using namespace std;
 		Il2CppString* ret = reinterpret_cast<decltype(Cute_Core_Device_GetPersistentDataPath_hook)*>
 			(Cute_Core_Device_GetPersistentDataPath_orig)();
 
-		if (strlen(g_customDataPath) > 0) {
-			Il2CppString* custompath = il2cpp_string_new(g_customDataPath);
+		if (strlen(g_sett->customDataPath) > 0) {
+			Il2CppString* custompath = il2cpp_string_new(g_sett->customDataPath);
 			wprintf(L"originalpersistentpath=%s, replacedpersistentpath=%s\n", ret->start_char, custompath->start_char);
 			return custompath;
 		}		
@@ -1906,8 +1934,8 @@ using namespace std;
 		Il2CppString* ret = reinterpret_cast<decltype(unityengine_get_persistentDataPath_hook)*>
 			(unityengine_get_persistentDataPath_orig)();
 
-		if (strlen(g_customDataPath) > 0) {
-			Il2CppString* custompath = il2cpp_string_new(g_customDataPath);
+		if (strlen(g_sett->customDataPath) > 0) {
+			Il2CppString* custompath = il2cpp_string_new(g_sett->customDataPath);
 			wprintf(L"[unityengine_get_persistentDataPath] originalpersistentpath=%s, replacedpersistentpath=%s\n", ret->start_char, custompath->start_char);
 			return custompath;
 		}
@@ -1992,7 +2020,7 @@ using namespace std;
 			//printf("WM_SIZING\n");
 			RECT* rect = reinterpret_cast<RECT*>(lParam);
 
-			float ratio = is_virt() ? 1.f / g_aspect_ratio : g_aspect_ratio;
+			float ratio = is_virt() ? 1.f / sett->aspect_ratio : sett->aspect_ratio;
 			float height = rect->bottom - rect->top;
 			float width = rect->right - rect->left;
 
@@ -2041,11 +2069,11 @@ using namespace std;
 	{
 		auto size = reinterpret_cast<decltype(get_virt_size_hook)*>(get_virt_size_orig)(pVec3, width, height);
 
-		height = width * g_aspect_ratio;
+		height = width * sett->aspect_ratio;
 
 		size->x = width;
 		size->y = height;
-		size->z = g_aspect_ratio;
+		size->z = sett->aspect_ratio;
 
 		return size;
 	}
@@ -2055,11 +2083,11 @@ using namespace std;
 	{
 		auto size = reinterpret_cast<decltype(get_hori_size_hook)*>(get_hori_size_orig)(pVec3, width, height);
 
-		width = height * g_aspect_ratio;
+		width = height * sett->aspect_ratio;
 
 		size->x = width;
 		size->y = height;
-		size->z = g_aspect_ratio;
+		size->z = sett->aspect_ratio;
 
 		return size;
 	}
@@ -2070,7 +2098,7 @@ using namespace std;
 	{
 		*r = *get_resolution(r);
 
-		int width = min(r->height, r->width) * g_aspect_ratio;
+		int width = min(r->height, r->width) * sett->aspect_ratio;
 		if (r->width > r->height)
 			r->width = width;
 		else
@@ -2108,7 +2136,7 @@ using namespace std;
 		get_resolution_stub(&r);
 
 		// set scale factor to make ui bigger on hi-res screen
-		set_scale_factor(_this, max(1.0f, r.width / 1920.f) * g_ui_scale);
+		set_scale_factor(_this, max(1.0f, r.width / 1920.f) * g_sett->uiScale);
 
 		return reinterpret_cast<decltype(canvas_scaler_setres_hook)*>(canvas_scaler_setres_orig)(_this, res);
 	}
@@ -2116,12 +2144,12 @@ using namespace std;
 	void* change_resize_ui_for_pc_orig;
 	void change_resize_ui_for_pc_hook(void* _this, int width, int height)
 	{
-		float scale = g_ui_scale;
+		float scale = g_sett->uiScale;
 		Resolution_t r;
 		get_resolution_stub(&r);
 
-		if (g_force_landscape && (g_ui_scale > 0.5))
-			scale = g_ui_scale - 0.5;
+		if (g_sett->forceLandscape && (g_sett->uiScale > 0.5))
+			scale = g_sett->uiScale - 0.5;
 
 		
 
@@ -2162,7 +2190,7 @@ using namespace std;
 	void* set_resolution_orig;
 	void set_resolution_hook(int width, int height, bool fullscreen)
 	{
-		if (g_auto_fullscreen) {
+		if (g_sett->autoFullscreen) {
 			Resolution_t r;
 			r = *get_resolution(&r);
 
@@ -2176,15 +2204,15 @@ using namespace std;
 
 
 			if (need_fullscreen) {
-				if (g_useExclusiveFullScreen) {
-					if (g_exclusiveFullScreenWidth > 0 && g_exclusiveFullScreenHeight > 0) {
+				if (g_sett->useExclusiveFullScreen) {
+					if (g_sett->exclusiveFullScreenWidth > 0 && g_sett->exclusiveFullScreenHeight > 0) {
 
-						setExclusiveFullScreen(g_exclusiveFullScreenWidth, g_exclusiveFullScreenHeight, FullScreenMode::ExclusiveFullScreen, g_max_fps);
+						setExclusiveFullScreen(g_sett->exclusiveFullScreenWidth, g_sett->exclusiveFullScreenHeight, FullScreenMode::ExclusiveFullScreen, g_sett->maxFps);
 						Sleep(1000);
 					}
 					else {
 
-						setExclusiveFullScreen(r.width, r.height, FullScreenMode::ExclusiveFullScreen, g_max_fps);
+						setExclusiveFullScreen(r.width, r.height, FullScreenMode::ExclusiveFullScreen, g_sett->maxFps);
 						Sleep(1000);
 					}
 
@@ -2294,7 +2322,7 @@ using namespace std;
 	Il2CppObject* MasterEventMotionData_GetAnimCommand_hook(Il2CppObject* _this, Il2CppString* commandName) {
 		wstring orig = commandName->start_char;
 		Il2CppObject* ret = nullptr;
-		if (g_walkMotionAllUrara) {
+		if (g_sett->walkMotionAllUrara) {
 			if (orig.starts_with(L"homewalk")) {
 				if (orig.contains(L"_U")) {
 					orig = L"homewalk03_U";
@@ -2323,15 +2351,15 @@ using namespace std;
 		int ret = reinterpret_cast<decltype(ModelController_GetCardId_hook)*>
 			(ModelController_GetCardId_orig)(_this);
 		auto gen = std::bind(std::uniform_int_distribution<>(0, 1), std::default_random_engine());
-		if (g_winMotion564) {
+		if (g_sett->winMotion564) {
 			bool b = gen();
 			int ret_edit = b ? 100701 : 100702;
 			printf("GetCardid ret=%d, replace=%d\n", ret, ret_edit);
 			ret = ret_edit;
 		}
-		else if(g_cardid > -1) {
-			ret = g_cardid;
-			printf("GetCardid ret=%d, replace=%d\n", ret, g_cardid);
+		else if(sett->cardid > -1) {
+			ret = sett->cardid;
+			printf("GetCardid ret=%d, replace=%d\n", ret,sett->cardid);
 		}
 		return ret;
 	}
@@ -2417,15 +2445,15 @@ using namespace std;
 		printf("_characterCollisionNum %d\n", _this->_data->_characterCollisionNum);
 		printf("_characterIKNum %d\n", _this->_data->_characterIKNum);
 
-		_this->_data->_chara->_selectCharaId = c_gachaCutinChara;
-		_this->_data->_chara->_selectClothId = c_gachaCutinDress;
-		_this->_data->_chara->_selectHeadId = c_gachaCutinHeadid;
-		_this->_data->_characterKeys->_selectCharaId = c_gachaCutinChara;
-		_this->_data->_characterKeys->_selectClothId = c_gachaCutinDress;
-		_this->_data->_characterKeys->_selectHeadId = c_gachaCutinHeadid;
-		_this->_selectCharaId = c_gachaCutinChara;
-		_this->_selectClothId = c_gachaCutinDress;
-		_this->_selectHeadId = c_gachaCutinHeadid;
+		_this->_data->_chara->_selectCharaId = sett->gachaCutinChara;
+		_this->_data->_chara->_selectClothId = sett->gachaCutinDress;
+		_this->_data->_chara->_selectHeadId = sett->gachaCutinHeadid;
+		_this->_data->_characterKeys->_selectCharaId = sett->gachaCutinChara;
+		_this->_data->_characterKeys->_selectClothId = sett->gachaCutinDress;
+		_this->_data->_characterKeys->_selectHeadId = sett->gachaCutinHeadid;
+		_this->_selectCharaId = sett->gachaCutinChara;
+		_this->_selectClothId = sett->gachaCutinDress;
+		_this->_selectHeadId = sett->gachaCutinHeadid;
 		//_this->_data->CharacterWindNum = 0;
 		
 
@@ -2451,9 +2479,9 @@ using namespace std;
 		printf("isWet=%d\n", isWet);
 		printf("overrideClothCategory=%d\n", overrideClothCategory);
 
-		charaId = c_gachaCutinChara;
-		clothId = c_gachaCutinDress;
-		headId = c_gachaCutinHeadid;
+		charaId = sett->gachaCutinChara;
+		clothId = sett->gachaCutinDress;
+		headId = sett->gachaCutinHeadid;
 		isUseDressDataHeadModelSubId = false;
 		
 
@@ -2517,14 +2545,14 @@ using namespace std;
 
 	Il2CppObject* ChangeScreenOrientation_hook(ScreenOrientation targetOrientation, bool isForce) {
 		return reinterpret_cast<decltype(ChangeScreenOrientation_hook)*>(ChangeScreenOrientation_orig)(
-			g_force_landscape ? ScreenOrientation::Landscape : targetOrientation, isForce);
+			g_sett->forceLandscape ? ScreenOrientation::Landscape : targetOrientation, isForce);
 	}
 
 	void* Screen_set_orientation_orig = nullptr;
 
 	void Screen_set_orientation_hook(ScreenOrientation orientation) {
 		if ((orientation == ScreenOrientation::Portrait ||
-			orientation == ScreenOrientation::PortraitUpsideDown) && g_force_landscape) {
+			orientation == ScreenOrientation::PortraitUpsideDown) && g_sett->forceLandscape) {
 			orientation = ScreenOrientation::Landscape;
 		}
 		reinterpret_cast<decltype(Screen_set_orientation_hook)*>(Screen_set_orientation_orig)(
@@ -2616,28 +2644,28 @@ using namespace std;
 
 	void* set_antialiasing_orig = nullptr;
 	void set_antialiasing_hook(int value) {
-		printf("setAntialiasing: %d -> %d\n", value, g_antialiasing);
+		printf("setAntialiasing: %d -> %d\n", value, sett->antialiasing);
 		//set_vsync_count_hook(1);
-		return reinterpret_cast<decltype(set_antialiasing_hook)*>(set_antialiasing_orig)(!g_highquality ? value : g_antialiasing);
+		return reinterpret_cast<decltype(set_antialiasing_hook)*>(set_antialiasing_orig)(!g_sett->highQuality ? value : sett->antialiasing);
 	}
 
 	void* graphics_quality_orig = nullptr;
 	void graphics_quality_hook(Il2CppObject* thisObj, int quality, bool force) {
-		printf("setGraphicsQuality: %d -> %d\n", quality, g_graphics_quality);
+		printf("setGraphicsQuality: %d -> %d\n", quality, sett->graphics_quality);
 		return reinterpret_cast<decltype(graphics_quality_hook)*>(graphics_quality_orig)(thisObj,
-			g_graphics_quality == -1 ? quality : g_graphics_quality,
+			sett->graphics_quality == -1 ? quality : sett->graphics_quality,
 			true);
 	}
 
 	void* set_RenderTextureAntiAliasing_orig;
 	void set_RenderTextureAntiAliasing_hook(void* _this, int value) {
 		return reinterpret_cast<decltype(set_RenderTextureAntiAliasing_hook)*>(set_RenderTextureAntiAliasing_orig)(_this,
-			!g_highquality ? value : g_antialiasing);
+			!g_sett->highQuality ? value : sett->antialiasing);
 	}
 
 	void* Get3DAntiAliasingLevel_orig;
 	int Get3DAntiAliasingLevel_hook(void* _this, bool allowMSAA) {
-		if (g_highquality) allowMSAA = true;
+		if (g_sett->highQuality) allowMSAA = true;
 		auto data = reinterpret_cast<decltype(Get3DAntiAliasingLevel_hook)*>(Get3DAntiAliasingLevel_orig)(_this, allowMSAA);
 		printf("Get3DAntiAliasingLevel: %d %d\n", allowMSAA, data);
 		return data;
@@ -2673,9 +2701,10 @@ using namespace std;
 
 	void* Gallop_SceneManager_LoadScene_orig = nullptr;
 	void* Gallop_SceneManager_LoadScene_hook(void* _this, int sceneId) {
+		currSceneID = sceneId;
 		printf("LoadScene id=%d\n",sceneId);
 		//
-		if (g_force_landscape && (sceneId == 1) ) {
+		if (g_sett->forceLandscape && (sceneId == 1) ) {
 			
 			auto enumerator1 = reinterpret_cast<Il2CppObject * (*)()>(il2cpp_symbols::get_method_pointer(
 				"umamusume.dll",
@@ -2697,18 +2726,18 @@ using namespace std;
 	
 	void* ResourcePath_GetRaceResultCuttPath_orig = nullptr;
 	Il2CppString* ResourcePath_GetRaceResultCuttPath_hook(int charaId, int subId, int cardId, int rank, int grade, int raceType) {
-		if (c_raceResultCutinMotionChara > -1) {
-			charaId = c_raceResultCutinMotionChara;
-			// dress->CharaId = c_raceResultCutinMotionChara;
+		if (sett->raceResultCutinMotionChara > -1) {
+			charaId = sett->raceResultCutinMotionChara;
+			// dress->CharaId = sett->raceResultCutinMotionChara;
 		}
-		if (g_cardid > -1) {
-			cardId = g_cardid;
+		if (sett->cardid > -1) {
+			cardId = sett->cardid;
 		}
-		if (c_raceResultCutinMotionGrade > -1) {
-			grade = c_raceResultCutinMotionGrade;
+		if (sett->raceResultCutinMotionGrade > -1) {
+			grade = sett->raceResultCutinMotionGrade;
 		}
-		if (c_raceResultCutinMotionRank > -1) {
-			rank = c_raceResultCutinMotionRank;
+		if (sett->raceResultCutinMotionRank > -1) {
+			rank = sett->raceResultCutinMotionRank;
 		}
 		printf("GetRaceResultCuttPath charaid=%d, subid=%d, cardid=%d,rank=%d, grade=%d, raceType=%d\n",charaId,subId,cardId,rank,grade,raceType);
 		return reinterpret_cast<decltype(ResourcePath_GetRaceResultCuttPath_hook)*>(ResourcePath_GetRaceResultCuttPath_orig)(charaId,subId,cardId,rank,grade,raceType);
@@ -2735,9 +2764,25 @@ using namespace std;
 		printf("DressID=%d\n", context->DressId);
 		printf("Controllertype=%d\n", context->ControllerType);
 		printf("overrideClothCategory=%d\n", context->_overrideClothCategory);
+
+		/*Il2CppObject* EditableCharinfo = il2cpp_object_new((Il2CppClass*)il2cpp_symbols::get_class("umamusume.dll", "Gallop", "EditableCharacterBuildInfo"));
+		
+		printf("il2cppobject_new %p\n", EditableCharinfo->klass);
+
+		auto ctor_2 = reinterpret_cast<void (*)
+			(Il2CppObject * _instance, int cardId, int charaId, int dressId, int controllerType, int zekken, int mobId, int backDancerColorId, int headId, bool isUseDressDataHeadModelSubId, bool isEnableModelCache)>(il2cpp_class_get_method_from_name((Il2CppClass*)EditableCharinfo->klass, ".ctor",10)->methodPointer);
+
+		printf("il2cppobject_new ctor_2 = %p\n", &ctor_2);
+
+		ctor_2(EditableCharinfo, 100101, 1001, 100101, (int)context->ControllerType , 0, 0, -1, 0, true, true);
+
+		printf("%p\n", EditableCharinfo);
+
+		return EditableCharinfo->klass;*/
+		
 		//context->_overrideClothCategory = CySpringDataContainer::Category::Training;
-		if (c_changeStoryChar) {
-			if ((c_story3dCharID < 0) || (c_story3dClothID < 0) || (c_story3dHeadID < 0))
+		if (sett->changeStoryChar) {
+			if ((sett->story3dCharID < 0) || (sett->story3dClothID < 0) || (sett->story3dHeadID < 0))
 			{
 				std::string line;
 				while (true) {
@@ -2783,25 +2828,41 @@ using namespace std;
 			}
 			else
 			{
-				context->CharaId = c_story3dCharID;
-				context->DressId = c_story3dClothID;
-				context->HeadId = c_story3dHeadID;
+				context->CharaId = sett->story3dCharID;
+				context->DressId = sett->story3dClothID;
+				context->HeadId = sett->story3dHeadID;
 				printf("CutInModelController.Context set %d %d %d\n", context->CharaId, context->DressId, context->HeadId);
 			}
 		}
 		//context->CharaId = 9004;
 		return reinterpret_cast<decltype(Gallop_CutInModelController_CreateModel_hook)*>(Gallop_CutInModelController_CreateModel_orig)(context);
 	}
-
+	float oldLiveTime = 0.0;
 	void* Live_Cutt_LiveTimelineControl_AlterUpdate_orig = nullptr;
 	void Live_Cutt_LiveTimelineControl_AlterUpdate_hook(void* _instance, float liveTime) {
-		if (isLiveTimeManual) {
+		
+		float target_frame_time = 1000.0f / static_cast<float>(liveTimeLineFPS);
+		float remaining_time = target_frame_time - liveTime;
+
+		if (sett->isLiveTimeManual) {
 			liveTime = liveTimeSec;
 		}
 		else {
 			liveTimeSec = liveTime;
 		}
+		if (liveTimeLineFPS > 0) {
+			
+		/*	if (remaining_time > 0) {
+				return reinterpret_cast<decltype(Live_Cutt_LiveTimelineControl_AlterUpdate_hook)*>(Live_Cutt_LiveTimelineControl_AlterUpdate_orig)(_instance, liveTime);
+
+			}*/
+			if ((liveTime - oldLiveTime) >= (1.0f / static_cast<float>(liveTimeLineFPS))) {
+				oldLiveTime = liveTime;
+			}
+			liveTime = oldLiveTime;
+		}
 		
+		oldLiveTime = liveTime;
 		return reinterpret_cast<decltype(Live_Cutt_LiveTimelineControl_AlterUpdate_hook)*>(Live_Cutt_LiveTimelineControl_AlterUpdate_orig)(_instance, liveTime);
 	}
 
@@ -2809,11 +2870,135 @@ using namespace std;
 	float Live_Director_get_LiveTotalTime_hook(Il2CppObject* _instance) {
 		float ret = reinterpret_cast<decltype(Live_Director_get_LiveTotalTime_hook)*>(Live_Director_get_LiveTotalTime_orig)(_instance);
 		liveTotalTimeSec = ret;
-		if (isLiveTimeManual) {
+		if (sett->isLiveTimeManual) {
 			ret = 9999.9;
 		}
 		return ret;
 	}
+
+
+
+	/*void* Gallop_EditableCharacterBuildInfo_ctor_overload2_orig = nullptr;
+	void* Gallop_EditableCharacterBuildInfo_ctor_overload2_hook(Il2CppObject* _instance,
+		int cardId, int charaId, int dressId, int controllerType, int zekken = 0, int mobId = 0,
+		int backDancerColorId = -1, int headId = 0, bool isUseDressDataHeadModelSubId = true, bool isEnableModelCache = true) {
+
+		printf("************************************\n");
+		printf("*        Function Parameters        *\n");
+		printf("************************************\n");
+		printf("cardId: %d\n", cardId);
+		printf("charaId: %d\n", charaId);
+		printf("dressId: %d\n", dressId);
+		printf("controllerType: %d\n", controllerType);
+		printf("zekken: %d\n", zekken);
+		printf("mobId: %d\n", mobId);
+		printf("backDancerColorId: %d\n", backDancerColorId);
+		printf("headId: %d\n", headId);
+		printf("isUseDressDataHeadModelSubId: %d\n", isUseDressDataHeadModelSubId);
+		printf("isEnableModelCache: %d\n", isEnableModelCache);
+		printf("************************************\n");
+
+		return reinterpret_cast<decltype(Gallop_EditableCharacterBuildInfo_ctor_overload2_hook)*>(Gallop_EditableCharacterBuildInfo_ctor_overload2_orig)
+			(_instance, cardId, charaId ,dressId, controllerType, zekken, mobId, backDancerColorId, headId, isUseDressDataHeadModelSubId, isEnableModelCache);
+	}*/
+
+
+
+	/*void* Gallop_CharacterBuildPathInfo_ctor_orig = nullptr;
+	void Gallop_CharacterBuildPathInfo_ctor_hook(Il2CppObject* _instance, 
+		CharacterBuildInfo* charBuildInfo, MasterDressData* dress) {
+
+		printf("----Gallop_CharacterBuildPathInfo_ctor_hook start----\n");
+		
+		printf("_cardId: %d\n", charBuildInfo->_cardId);
+		printf("_charaId: %d\n", charBuildInfo->_charaId);
+		printf("_mobId: %d\n", charBuildInfo->_mobId);
+		printf("_headModelSubId: %d\n", charBuildInfo->_headModelSubId);
+		printf("_isUseDressDataHeadModelSubId: %d\n", charBuildInfo->_isUseDressDataHeadModelSubId);
+		printf("_bodyModelSubId: %d\n", charBuildInfo->_bodyModelSubId);
+		printf("_dressId: %d\n", charBuildInfo->_dressId);
+		printf("_controllerType: %d\n", charBuildInfo->_controllerType);
+		printf("_zekken: %d\n", charBuildInfo->_zekken);
+		wprintf(L"_name: %p\n", charBuildInfo->_name->start_char);
+		printf("_genderType: %d\n", charBuildInfo->_genderType);
+		printf("_heightType: %d\n", charBuildInfo->_heightType);
+		printf("_bodySize: %d\n", charBuildInfo->_bodySize);
+		printf("_bustType: %d\n", charBuildInfo->_bustType);
+		printf("_height: %f\n", charBuildInfo->_height);
+		printf("_skinType: %d\n", charBuildInfo->_skinType);
+		printf("_socksType: %d\n", charBuildInfo->_socksType);
+		printf("_defaultPersonalityType: %d\n", charBuildInfo->_defaultPersonalityType);
+		printf("_raceGateInPersonalityType: %d\n", charBuildInfo->_raceGateInPersonalityType);
+		printf("_raceRunPersonalityType: %d\n", charBuildInfo->_raceRunPersonalityType);
+		printf("_raceOverRunPersonalityType: %d\n", charBuildInfo->_raceOverRunPersonalityType);
+		printf("_raceRunningType: %d\n", charBuildInfo->_raceRunningType);
+		printf("_zekkenColor: %d\n", charBuildInfo->_zekkenColor);
+		printf("_zekkenFontColor: %d\n", charBuildInfo->_zekkenFontColor);
+		printf("_zekkenFontStyle: %d\n", charBuildInfo->_zekkenFontStyle);
+		printf("_wetTextureArray: %p\n", charBuildInfo->_wetTextureArray);
+		printf("_dirtTextureArray: %p\n", charBuildInfo->_dirtTextureArray);
+		printf("_sweatLocator: %p\n", charBuildInfo->_sweatLocator);
+		printf("_sweatObject: %p\n", charBuildInfo->_sweatObject);
+		printf("_frameColor: %d\n", charBuildInfo->_frameColor);
+		printf("_popularity: %d\n", charBuildInfo->_popularity);
+		printf("_npcType: %d\n", charBuildInfo->_npcType);
+		printf("_charaBuildPathInfo: %p\n", charBuildInfo->_charaBuildPathInfo);
+		printf("_clothBuildPathInfo: %p\n", charBuildInfo->_clothBuildPathInfo);
+		printf("_dressElement: %p\n", charBuildInfo->_dressElement);
+		printf("_backDancerColorId: %d\n", charBuildInfo->_backDancerColorId);
+		printf("_mobInfo: %p\n", &charBuildInfo->_mobInfo);
+		printf("_isPersonalDress: %d\n", charBuildInfo->_isPersonalDress);
+		printf("_miniMobTailId: %d\n", charBuildInfo->_miniMobTailId);
+		printf("_miniMobParentCharaId: %d\n", charBuildInfo->_miniMobParentCharaId);
+		printf("_overrideClothCategory: %d\n", charBuildInfo->_overrideClothCategory);
+		printf("_loadHashKey: %d\n", charBuildInfo->_loadHashKey);
+		printf("_isPreCreatedLoadHashKey: %d\n", charBuildInfo->_isPreCreatedLoadHashKey);
+		printf("_initialized: %d\n", charBuildInfo->_initialized);
+
+		printf("----MasterDressData dress----\n");
+		printf("Id: %d\n", dress->Id);
+		printf("ConditionType: %d\n", dress->ConditionType);
+		printf("HaveMini: %d\n", dress->HaveMini);
+		printf("GeneralPurpose: %d\n", dress->GeneralPurpose);
+		printf("CharaId: %d\n", dress->CharaId);
+		printf("UseGender: %d\n", dress->UseGender);
+		printf("BodyType: %d\n", dress->BodyType);
+		printf("BodyTypeSub: %d\n", dress->BodyTypeSub);
+		printf("BodySetting: %d\n", dress->BodySetting);
+		printf("UseRace: %d\n", dress->UseRace);
+		printf("UseLive: %d\n", dress->UseLive);
+		printf("UseLiveTheater: %d\n", dress->UseLiveTheater);
+		printf("UseHome: %d\n", dress->UseHome);
+		printf("IsWet: %d\n", dress->IsWet);
+		printf("IsDirt: %d\n", dress->IsDirt);
+		printf("HeadSubId: %d\n", dress->HeadSubId);
+		printf("UseSeason: %d\n", dress->UseSeason);
+		printf("DressColorMain: %p\n", dress->DressColorMain);
+		printf("DressColorSub: %p\n", dress->DressColorSub);
+		printf("ColorNum: %d\n", dress->ColorNum);
+		printf("DispOrder: %d\n", dress->DispOrder);
+		printf("TailModelId: %d\n", dress->TailModelId);
+		printf("TailModelSubId: %d\n", dress->TailModelSubId);
+		printf("StartTime: %lld\n", dress->StartTime);
+		printf("EndTime: %lld\n", dress->EndTime);
+		printf("_getCondition: %d\n", dress->_getCondition);
+
+		printf("----Gallop_CharacterBuildPathInfo_ctor_hook End----\n");
+
+		charBuildInfo->_isUseDressDataHeadModelSubId = 0;
+		charBuildInfo->_cardId = 100101;
+		charBuildInfo->_charaId = 1001;
+		charBuildInfo->_headModelSubId = 0;
+		charBuildInfo->_dressId = 100101;
+		charBuildInfo->_zekken = 100101;
+		dress->Id = 100101;
+		dress->CharaId = 1001;
+		dress->UseGender = 1001;
+		return reinterpret_cast<decltype(Gallop_CharacterBuildPathInfo_ctor_hook)*>(Gallop_CharacterBuildPathInfo_ctor_orig)
+			(_instance, charBuildInfo, dress);
+	}*/
+
+
 
 	//void* Live_Cutt_LiveTimelineWorkSheet_cctor_orig = nullptr;
 	//void Live_Cutt_LiveTimelineWorkSheet_cctor_hook(LiveTimelineWorkSheet* _instance) {
@@ -3249,20 +3434,20 @@ using namespace std;
 			"RaceResultScene", "PlayFinishOrderAnim", 1
 		);
 
-		/*auto RaceResultCutInHelper_LoadBodyMotion_addr = reinterpret_cast<void*(*)(int,MasterDressData*,int,int,int,int)>(
+		auto RaceResultCutInHelper_LoadBodyMotion_addr = reinterpret_cast<void*(*)(int,MasterDressData*,int,int,int,int)>(
 			il2cpp_symbols::get_method_pointer(
 				"umamusume.dll", "Gallop",
-				"RaceResultCutInHelper", "LoadBodyMotion", 7
+				"RaceResultCutInHelper", "LoadBodyMotion", 8
 			)
-		);*/
+		);
 
 
-		/*auto RaceResultCutInHelper_LoadCameraMotion_addr = reinterpret_cast<void* (*)(int, MasterDressData*, int, int, int, int)>(
+		auto RaceResultCutInHelper_LoadCameraMotion_addr = reinterpret_cast<void* (*)(int, MasterDressData*, int, int, int, int)>(
 			il2cpp_symbols::get_method_pointer(
 				"umamusume.dll", "Gallop",
-				"RaceResultCutInHelper", "LoadCameraMotion", 6
+				"RaceResultCutInHelper", "LoadCameraMotion", 8
 			)
-		);*/
+		);
 
 		auto RaceResultCutInHelper_LoadEarMotion_addr = reinterpret_cast<void* (*)(int, MasterDressData*, int, int, int, int)>(
 			il2cpp_symbols::get_method_pointer(
@@ -3490,6 +3675,9 @@ using namespace std;
 				)
 			);
 
+
+
+
 		GetKeyDown = reinterpret_cast<bool(*)(KeyCode)> (
 			il2cpp_symbols::get_method_pointer(
 				"UnityEngine.InputLegacyModule.dll", "UnityEngine",
@@ -3610,13 +3798,13 @@ using namespace std;
 		/*MH_CreateHook((LPVOID)chara_addr, chara_hook, &chara_orig);
 		MH_EnableHook((LPVOID)chara_addr);*/
 
-		auto CutInCharacter_GenerateCutInModelControllerContext_addr = il2cpp_symbols::get_method_pointer(
+		/*auto CutInCharacter_GenerateCutInModelControllerContext_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop.CutIn",
 			"CutInCharacter", "GenerateCutInModelControllerContext", 9 
 		); 
 
 		MH_CreateHook((LPVOID)CutInCharacter_GenerateCutInModelControllerContext_addr, CutInCharacter_GenerateCutInModelControllerContext_hook, &CutInCharacter_GenerateCutInModelControllerContext_orig);
-		MH_EnableHook((LPVOID)CutInCharacter_GenerateCutInModelControllerContext_addr);
+		MH_EnableHook((LPVOID)CutInCharacter_GenerateCutInModelControllerContext_addr);*/
 
 		auto CutInCharacter_CreateModel_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop.CutIn",
@@ -3788,6 +3976,32 @@ using namespace std;
 			Live_Director_get_LiveTotalTime_hook, &Live_Director_get_LiveTotalTime_orig);
 		MH_EnableHook((LPVOID)Live_Director_get_LiveTotalTime_addr);
 
+		GameObject_Find = reinterpret_cast<void*(*)(Il2CppString*)>(il2cpp_symbols::get_method_pointer(
+			"UnityEngine.CoreModule.dll","UnityEngine",
+			"GameObject","Find",1
+		));
+
+		
+
+
+		/*auto Gallop_EditableCharacterBuildInfo_ctor_overload2_addr = reinterpret_cast<float(*)()>(il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"EditableCharacterBuildInfo", ".ctor", 10
+		));*/
+
+		/*MH_CreateHook((LPVOID)Gallop_EditableCharacterBuildInfo_ctor_overload2_addr,
+			Gallop_EditableCharacterBuildInfo_ctor_overload2_hook, &Gallop_EditableCharacterBuildInfo_ctor_overload2_orig);
+		MH_EnableHook((LPVOID)Gallop_EditableCharacterBuildInfo_ctor_overload2_addr);*/
+
+		/*auto Gallop_CharacterBuildPathInfo_ctor_addr = reinterpret_cast<float(*)()>(il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"CharacterBuildPathInfo", ".ctor", 2
+		));
+
+		MH_CreateHook((LPVOID)Gallop_CharacterBuildPathInfo_ctor_addr,
+			Gallop_CharacterBuildPathInfo_ctor_hook, &Gallop_CharacterBuildPathInfo_ctor_orig);
+		MH_EnableHook((LPVOID)Gallop_CharacterBuildPathInfo_ctor_addr);*/
+
 		/*auto  Live_Cutt_LiveTimelineWorkSheet_cctor_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop.Live.Cutt",
 			"LiveTimelineWorkSheet", ".cctor", 0
@@ -3915,8 +4129,8 @@ using namespace std;
 		ADD_HOOK(LiveTheaterInfo_UpdateCharaDressIds, "LiveTheaterInfo_UpdateCharaDressIds(LiveTheaterMemberInfo[]) at %p\n");
 		ADD_HOOK(LiveTheaterInfo_CheckDress, "LiveTheaterInfo_CheckDress(int,CharaDressIdSet) at %p\n");
 		ADD_HOOK(RaceResultScene_GetMotionVariationId, "RaceResultScene_GetMotionVariationId(int) at %p\n");
-		//ADD_HOOK(RaceResultCutInHelper_LoadBodyMotion, "RaceResultCutInHelper_LoadBodyMotion(...7) at %p\n");
-		//ADD_HOOK(RaceResultCutInHelper_LoadCameraMotion, "RaceResultCutInHelper_LoadCameraMotion(...5) at %p\n");
+		ADD_HOOK(RaceResultCutInHelper_LoadBodyMotion, "RaceResultCutInHelper_LoadBodyMotion(...7) at %p\n");
+		ADD_HOOK(RaceResultCutInHelper_LoadCameraMotion, "RaceResultCutInHelper_LoadCameraMotion(...5) at %p\n");
 		ADD_HOOK(RaceResultCutInHelper_LoadEarMotion, "RaceResultCutInHelper_LoadEarMotion(...5) at %p\n");
 		ADD_HOOK(RaceResultCutInHelper_LoadFacialMotion, "RaceResultCutInHelper_LoadFacialMotion(...5) at %p\n");
 		ADD_HOOK(ResourcePath_GetCharacterRaceResultMotionPath,"ResourcePath_GetCharacterRaceResultMotionPath at %p\n")
@@ -3927,7 +4141,7 @@ using namespace std;
 		//ADD_HOOK(RaceSkillCutInHelper_InitForGacha, "RaceSkillCutInHelper_InitForGacha at %p\n");
 		ADD_HOOK(Gallop_Cutin_CutinCharacter_ctor, "Gallop_Cutin_CutinCharacter_.ctor at %p\n");
 		ADD_HOOK(set_virt, "set_virt at %p\n");
-		printf("CustomHost:%s\n",g_customHost);	
+		printf("CustomHost:%s\n", g_sett->customHost);
 		ADD_HOOK(Cute_Http_WWWRequest_Post, "Cute_Http_WWWRequest_Post(...) at %p\n");
 		ADD_HOOK(CutInHelper_OnCreateCharacterModel, "CutInHelper_OnCreateCharacterModel at %p\n");
 
@@ -3978,7 +4192,7 @@ using namespace std;
 		ADD_HOOK(Screen_set_orientation, "Gallop.NowLoading::Show at %p\n");
 		ADD_HOOK(ChangeScreenOrientation, "Gallop.NowLoading::Show at %p\n");
 
-		if (g_force_landscape) {
+		if (g_sett->forceLandscape) {
 			auto enumerator1 = reinterpret_cast<Il2CppObject * (*)()>(il2cpp_symbols::get_method_pointer(
 				"umamusume.dll",
 				"Gallop",
@@ -4016,19 +4230,19 @@ using namespace std;
 		//ADD_HOOK(Live_Cutt_AlterUpdate, "Live_Cutt_AlterUpdate at %p\n");
 		//ADD_HOOK(Race_GetRankNumSmallPath, "AtlasSpritePath.Race.GetRankNumSmallPath(int) at %p");
 		//ADD_HOOK(GachaBGController_GateDoor_SetRarity, "Gallop.GachaBGController.GateDoor.SetRarity(int(enum)) at %p\n");
-		if (g_replace_font)
+		if (g_sett->replaceFont)
 		{
 			ADD_HOOK(on_populate, "Gallop.TextCommon::OnPopulateMesh at %p\n");
 		}
 		
-		if (g_max_fps > -1)
+		if (g_sett->maxFps > -1)
 		{
 			// break 30-40fps limit
 			//ADD_HOOK(set_fps, "UnityEngine.Application.set_targetFrameRate at %p \n");
 		}
 		ADD_HOOK(set_fps, "UnityEngine.Application.set_targetFrameRate at %p \n");
 
-		if (g_unlock_size)
+		if (g_sett->unlockSize)
 		{
 			// break 1080p size limit
 			ADD_HOOK(get_virt_size, "Gallop.StandaloneWindowResize.getOptimizedWindowSizeVirt at %p \n");
@@ -4043,13 +4257,13 @@ using namespace std;
 		}
 
 		ADD_HOOK(set_resolution, "UnityEngine.Screen.SetResolution(int, int, bool) at %p\n");
-		if (g_auto_fullscreen)
+		if (g_sett->autoFullscreen)
 		{			
 			//ADD_HOOK(setExclusiveFullScreen, "UnityEngine.Screen.SetResolution(int, int, int(enum),int) at %p\n");
 			adjust_size();
 		}
 		
-		if (g_dump_entries)
+		if (g_sett->dumpStaticEntries)
 			dump_all_entries();
 
 		
@@ -4085,6 +4299,18 @@ using namespace std;
 
 			/*MH_CreateHook((LPVOID)cyan_localfile_pathresolver_getlocalpath_addr, unityengine_get_persistentDataPath_hook, &cyan_localfile_pathresolver_getlocalpath_orig);
 			MH_EnableHook((LPVOID)cyan_localfile_pathresolver_getlocalpath_addr);*/
+			GetGraphicsDeviceName = reinterpret_cast<Il2CppString * (*)()>(il2cpp_symbols::get_method_pointer(
+				"UnityEngine.CoreModule.dll", "UnityEngine", "SystemInfo", "GetGraphicsDeviceName", 0
+			));
+
+			wprintf(L"GPUName = %s\n", GetGraphicsDeviceName()->start_char);
+
+			char* conv_str = new char[GetGraphicsDeviceName()->length + 2];
+			memset(conv_str, 0, GetGraphicsDeviceName()->length + 2);
+			
+			wcstombs(conv_str, GetGraphicsDeviceName()->start_char, GetGraphicsDeviceName()->length + 1);
+
+			GPUName = (const char*)conv_str;
 
 			beforePatched = true;
 		}
@@ -4152,7 +4378,7 @@ using namespace std;
 		SetWindowText(currenthWnd, buf);
 
 
-		if (g_lz4Encrypt) {
+		if (g_sett->lz4Encrypt) {
 			decrypted = new char[dstCapacity];
 			ret = reinterpret_cast<decltype(LZ4_decompress_safe_ext_hook)*>(LZ4_decompress_safe_ext_orig)(
 				src, decrypted, compressedSize, dstCapacity);
@@ -4196,7 +4422,7 @@ using namespace std;
 		
 		printf("Server Response: %d Bytes\n",ret);
 		
-		if (g_saveMsgPack) {
+		if (g_sett->saveMsgPack) {
 
 			auto out_path = std::string("CarrotJuicer\\").append(current_time()).append(ReplaceAll(currentUrl.path(),"/","_")).append("R.msgpack");
 			write_file(out_path, decrypted, ret);
@@ -4204,13 +4430,13 @@ using namespace std;
 		}
 			
 		
-		if (g_sendserver) {
+		if (g_sett->passPacket) {
 			printf("------Real Cygames server -> modding server(local) -> Client------\n");
 			httplib::Headers headers = {
 				{ "Url", lastUrl.str() }
 			};
 			
-			httplib::Client cli(server_ip,server_port);
+			httplib::Client cli(g_sett->serverIP, g_sett->serverPort);
 			std::string data(decrypted, ret);
 			auto res = cli.Post("/umamusume_uploadmsgpack/live",headers, data, "application/x-msgpack");
 			res->status;
@@ -4249,8 +4475,8 @@ using namespace std;
 		//char* decrypted = new char[dstCapacity] {};
 		char* raw_data = new char[srcSize] {};
 		memcpy(raw_data, src, srcSize);
-		if (g_sendserver) {
-			httplib::Client cli(server_ip, server_port);
+		if (g_sett->passPacket) {
+			httplib::Client cli(g_sett->serverIP, g_sett->serverPort);
 			std::string data(raw_data, srcSize);
 			printf("------Client -> modding server(local) -> Real Cygames server------\n");
 			httplib::Headers headers = {
@@ -4263,7 +4489,7 @@ using namespace std;
 			size_t clength = res->body.length();
 			memcpy(src, returned, clength);
 			int ret = 0;
-			if (g_lz4Encrypt) {
+			if (g_sett->lz4Encrypt) {
 				ret = reinterpret_cast<decltype(LZ4_compress_default_ext_hook)*>(LZ4_compress_default_ext_orig)(
 					src, dst, clength, dstCapacity);
 			}
@@ -4276,7 +4502,7 @@ using namespace std;
 			//auto out_path = std::string("CarrotJuicer\\").append(current_time()).append("Q.msgpack");
 			//write_file(out_path, src, srcSize);
 			//printf("wrote raw clinet request to %s\n", out_path.c_str());
-			if (g_saveMsgPack) {
+			if (g_sett->saveMsgPack) {
 				auto out_path = std::string("CarrotJuicer\\").append(current_time()).append(ReplaceAll(lastUrl.path(), "/", "_")).append("Q.msgpack");
 				write_file(out_path, src, srcSize);
 				printf("wrote clinet request to %s\n", out_path.c_str());
@@ -4288,7 +4514,7 @@ using namespace std;
 		}
 		else {
 			int ret = 0;
-			if (g_lz4Encrypt) {
+			if (g_sett->lz4Encrypt) {
 				ret = reinterpret_cast<decltype(LZ4_compress_default_ext_hook)*>(LZ4_compress_default_ext_orig)(
 					src, dst, srcSize, dstCapacity);
 			}
@@ -4300,7 +4526,7 @@ using namespace std;
 			//int ret = reinterpret_cast<decltype(LZ4_compress_default_ext_hook)*>(LZ4_compress_default_ext_orig)(
 			//	src, dst, srcSize, dstCapacity);
 			printf("Raw Client data: %d Bytes (Compressed/Encrypted to %d bytes) -> \n", srcSize, ret);
-			if (g_saveMsgPack) {
+			if (g_sett->saveMsgPack) {
 				auto out_path = std::string("CarrotJuicer\\").append(current_time()).append(ReplaceAll(lastUrl.path(), "/", "_")).append("Q.msgpack");
 				write_file(out_path, src, srcSize);
 				printf("wrote clinet request to %s\n", out_path.c_str());
@@ -4314,7 +4540,7 @@ using namespace std;
 	}
 	void bootstrap_carrot_juicer()
 	{
-		if (g_saveMsgPack) {
+		if (g_sett->saveMsgPack) {
 			std::filesystem::create_directory("CarrotJuicer");
 		}
 
@@ -4367,12 +4593,10 @@ bool init_hook()
 	document.ParseStream(wrapper);
 
 	if (!document.HasParseError()) {
-		g_sendserver = document["passPacket"].GetBool();
-		strcpy(server_ip, document["serverIP"].GetString());
-		server_port = document["serverPort"].GetInt();
+		
 		//strcpy(anotherprgname, document["runanotherprgname"].GetString());
-		if (g_sendserver) {			
-			printf("Json Pass to another server enabled: %s:%d\n", server_ip,server_port);
+		if (g_sett->passPacket) {
+			printf("Json Pass to another server enabled: %s:%d\n", g_sett->serverIP, g_sett->serverPort);
 			//printf("excuting %s\n", anotherprgname);
 			//ShellExecute(0, "open", "explorer", anotherprgname, 0, SW_HIDE);
 		}
@@ -4403,6 +4627,7 @@ void uninit_hook()
 	enabled_hooks.clear();
 
 	MH_Uninitialize();
+
 }
 
 void DumpHex(const void* data, size_t size) {
@@ -4461,6 +4686,8 @@ static bool show_info_window = false;
 static void* selected_obj = 0;
 static bool show_active_box = false;
 
+const int MAX_FPS_VALUES = 100;               // 최근 100개의 FPS 값을 저장
+static ScrollingBuffer fpsValues;                  // FPS 값들을 저장할 큐
 
 
 int CALLBACK EnumFontFamExProc(
@@ -4901,10 +5128,10 @@ int imguiwindow()
 
 		
 
-		ImGui::Begin("Hello World!", (bool*)0, ImGuiWindowFlags_NoTitleBar);
+		/*ImGui::Begin("Hello World!", (bool*)0, ImGuiWindowFlags_NoTitleBar);
 		ImGui::SetWindowSize({ 0,0 });
 		ImGui::SetWindowPos({99999,99999});	
-		ImGui::End();
+		ImGui::End();*/
 
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 5.f);
 		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(43.f / 255.f, 43.f / 255.f, 43.f / 255.f, 100.f / 255.f));
@@ -4918,10 +5145,88 @@ int imguiwindow()
 		}
 
 
-		bool isCamStopped = c_stopLiveCam;
+		bool isCamStopped = sett->stopLiveCam;
+
+		if (currSceneID == 4) {
+			int width, height;
+			float currentFps = ImGui::GetIO().Framerate;
+			static float t = 0;
+			t += ImGui::GetIO().DeltaTime;
+			RECT rect;
+			if (GetWindowRect(currenthWnd, &rect))
+			{
+				width = rect.right - rect.left;
+				height = rect.bottom - rect.top;
+			}
+
+			if (g_sett->isShowLivePerfInfo) {
+				ImGui::Begin("Status Bar", NULL,
+					ImGuiWindowFlags_NoTitleBar |
+					ImGuiWindowFlags_NoResize |
+					ImGuiWindowFlags_NoMove |
+					ImGuiWindowFlags_NoScrollbar |
+					ImGuiWindowFlags_NoSavedSettings |
+					ImGuiWindowFlags_AlwaysAutoResize);
+
+				
+
+
+				fpsValues.AddPoint(t, currentFps);
+				/*if (fpsValues.size() > MAX_FPS_VALUES) {
+					fpsValues.pop_front();
+				}*/
+
+				
+
+				//glfwGetWindowSize(window, &width, &height);
+				ImGui::SetWindowPos(ImVec2(0, 0));
+				ImGui::SetWindowSize(ImVec2(static_cast<float>(width), 0));
+
+
+				ImGui::Text("%02d:%02d / %02d:%02d | Current: %.3f sec |", static_cast<int>(liveTimeSec) / 60, static_cast<int>(liveTimeSec) % 60,
+					static_cast<int>(liveTotalTimeSec) / 60, static_cast<int>(liveTotalTimeSec) % 60, liveTimeSec);
+				ImGui::SameLine();
+
+				//ImGui::SameLine(width - 150); // Adjust this value accordingly
+				ImGui::Text("출력: %s (%d hz) | 게임: %dx%d %.1f fps | 제한: %d fps | 카메라 %s | 타임라인 %s",
+					GPUName,
+					getCurrentDisplayHz(), width, height, currentFps, g_sett->maxFps, sett->stopLiveCam ? "수동" : "자동", sett->isLiveTimeManual ? "수동" : "자동");
+
+				ImGui::End();
+			}
+			
+
+
+			//Fps graph
+
+			if (g_sett->isShowLiveFPSGraph) {
+				ImGui::SetNextWindowPos(ImVec2(width - 600, 0), ImGuiCond_Always); // 오른쪽 상단에 위치
+				ImGui::SetNextWindowSize(ImVec2(600, 300), ImGuiCond_Always);      // 윈도우 크기 설정
 
 
 
+				if (ImGui::Begin("FPS Graph", NULL,
+					ImGuiWindowFlags_NoTitleBar |
+					ImGuiWindowFlags_NoMove |
+					ImGuiWindowFlags_NoResize))
+				{
+					if (ImPlot::BeginPlot("Frame per second")) {
+						//ImPlot::SetupAxes(NULL, NULL, flags, flags);
+						ImPlot::SetupAxisLimits(ImAxis_X1, t - 10.0f, t, ImGuiCond_Always);
+						ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0, 240.0);
+						ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+						ImPlot::PlotLine("FPS", &fpsValues.Data[0].x, &fpsValues.Data[0].y, fpsValues.Data.size(), 0, fpsValues.Offset, 2 * sizeof(float));
+						//ImPlot::PlotLine("My Line Plot", x_data, y_data, fpsValues.size());
+						ImPlot::EndPlot();
+					}
+
+					ImGui::End();
+				}
+			}
+
+			
+
+		}
 
 
 		// 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
@@ -4935,26 +5240,26 @@ int imguiwindow()
 			static int counter = 0;
 			
 
-			ImGui::Begin("설정 메뉴 (토글 키: F12)", &imgui_settingwnd_open);                          // Create a window called "Hello, world!" and append into it.
+			ImGui::Begin("설정 메뉴 (토글 키: F12)", &imgui_settingwnd_open);                  
 			
 			
 			
 			//ImGui::SetNextWindowPos();
-			ImGui::Text("Host: %s", g_customHost);
+			ImGui::Text("Host: %s", g_sett->customHost);
 
 			if (ImGui::CollapsingHeader("게임 시스템", ImGuiTreeNodeFlags_DefaultOpen)) {
 
 				BeginGroupPanel("그래픽");
-				ImGui::Checkbox("자동 fps 설정", &g_autofps); ImGui::SameLine(); HelpMarker("모니터 Hz 수에 맞춰서 fps를 자동 설정합니다.");
-				ImGui::SliderInt("FPS 제한", &g_max_fps, 0, 240); ImGui::SameLine(); HelpMarker("제한할 fps를 설정합니다. \"자동 fps 설정\" 이 비활성화 된 경우에만 작동합니다.\n(0인 경우 제한없음)");
+				ImGui::Checkbox("자동 fps 설정", &g_sett->autoFpsSet); ImGui::SameLine(); HelpMarker("모니터 Hz 수에 맞춰서 fps를 자동 설정합니다.");
+				ImGui::SliderInt("FPS 제한", &g_sett->maxFps, 0, 240); ImGui::SameLine(); HelpMarker("제한할 fps를 설정합니다. \"자동 fps 설정\" 이 비활성화 된 경우에만 작동합니다.\n(0인 경우 제한없음)");
 				if (ImGui::Button("적용")) {
-					set_fps_hook(g_max_fps);
+					set_fps_hook(g_sett->maxFps);
 				} ImGui::SameLine(); HelpMarker("fps 제한을 적용합니다.");
 
-				ImGui::Checkbox("강제 가로모드", &g_force_landscape); ImGui::SameLine(); HelpMarker("게임을 가로 모드로 고정합니다.\n변경 내용은 게임 리셋 시 적용됩니다.");
-				ImGui::Checkbox("자동 전체화면", &g_auto_fullscreen); ImGui::SameLine(); HelpMarker("가로모드 시 자동으로 전체화면이 됩니다.");
-				ImGui::Checkbox("고품질 그래픽", &g_highquality); ImGui::SameLine(); HelpMarker("안티 에일리어싱, MSAA 허용 등 전반적인 3D 그래픽 품질을 높입니다.\n변경 내용은 게임 리셋 시 적용됩니다.");
-				ImGui::SliderFloat("UI 배율", &g_ui_scale, 0.1, 10.0, "%.1f"); ImGui::SameLine(); HelpMarker("GUI의 배율을 설정합니다.\n변경 내용은 게임 리셋 시 적용됩니다.");
+				ImGui::Checkbox("강제 가로모드", &g_sett->forceLandscape); ImGui::SameLine(); HelpMarker("게임을 가로 모드로 고정합니다.\n변경 내용은 게임 리셋 시 적용됩니다.");
+				ImGui::Checkbox("자동 전체화면", &g_sett->autoFullscreen); ImGui::SameLine(); HelpMarker("가로모드 시 자동으로 전체화면이 됩니다.");
+				ImGui::Checkbox("고품질 그래픽", &g_sett->highQuality); ImGui::SameLine(); HelpMarker("안티 에일리어싱, MSAA 허용 등 전반적인 3D 그래픽 품질을 높입니다.\n변경 내용은 게임 리셋 시 적용됩니다.");
+				ImGui::SliderFloat("UI 배율", &g_sett->uiScale, 0.1, 10.0, "%.1f"); ImGui::SameLine(); HelpMarker("GUI의 배율을 설정합니다.\n변경 내용은 게임 리셋 시 적용됩니다.");
 				
 				EndGroupPanel();
 
@@ -4975,7 +5280,20 @@ int imguiwindow()
 
 
 				BeginGroupPanel("시스템");
-				ImGui::Checkbox("강제 리셋 허용", &g_gotoTitleOnError); ImGui::SameLine(); HelpMarker("게임 내에서 강제적으로 타이틀 화면으로 돌아가는 동작을 허용합니다.");
+				ImGui::Checkbox("강제 리셋 허용", &g_sett->gotoTitleOnError); ImGui::SameLine(); HelpMarker("게임 내에서 강제적으로 타이틀 화면으로 돌아가는 동작을 허용합니다.");
+				if (ImGui::Checkbox("클릭 이펙트 켜기", &g_sett->isTapEffectEnabled))
+				{
+					if (g_sett->isTapEffectEnabled) {
+						GameObject_SetActive("Gallop.GameSystem/SystemManagerRoot/SystemSingleton/UIManager/SystemCanvas/TapEffectCanvas", true);
+						
+						printf("tapeffect on\n");
+					}
+					else {
+						GameObject_SetActive("Gallop.GameSystem/SystemManagerRoot/SystemSingleton/UIManager/SystemCanvas/TapEffectCanvas", false);
+						printf("tapeffect off\n");
+					}
+
+				}
 				EndGroupPanel();
 
 
@@ -4983,14 +5301,14 @@ int imguiwindow()
 			}
 			
 			if (ImGui::CollapsingHeader("레이스", ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::SliderFloat("등수 표시기 출력 위치", &g_rankUIShowMeter,0.0,3000.0,"%.2f M"); ImGui::SameLine(); HelpMarker("레이스 시작 후 등수 표시기를 출력할 위치를 정합니다.\n(LCtrl+슬라이더 클릭으로 직접 입력 가능)");
-				ImGui::SliderFloat("등수 표시기 숨김 위치", &g_rankUIHideoffset,0.0,9999.0,"%.2f"); ImGui::SameLine(); HelpMarker("등수 표시기를 숨길 타이밍을 지정합니다.\n(LCtrl+슬라이더 클릭으로 직접 입력 가능)");
+				ImGui::SliderFloat("등수 표시기 출력 위치", &g_sett->rankUIShowMeter,0.0,3000.0,"%.2f M"); ImGui::SameLine(); HelpMarker("레이스 시작 후 등수 표시기를 출력할 위치를 정합니다.\n(LCtrl+슬라이더 클릭으로 직접 입력 가능)");
+				ImGui::SliderFloat("등수 표시기 숨김 위치", &g_sett->rankUIHideoffset,0.0,9999.0,"%.2f"); ImGui::SameLine(); HelpMarker("등수 표시기를 숨길 타이밍을 지정합니다.\n(LCtrl+슬라이더 클릭으로 직접 입력 가능)");
 				ImGui::Checkbox("착순 마크 표시", &showFinishOrderFlash); ImGui::SameLine(); HelpMarker("레이스 결과 화면에서 착순 애니메이션을 표시합니다.");
 			}
 
 			if (ImGui::CollapsingHeader("라이브", ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::Checkbox("라이브 카메라 멈추기", &c_stopLiveCam); ImGui::SameLine(); HelpMarker("라이브에서 카메라 워크를 정지합니다.\n단축키: S");
-				ImGui::Checkbox("라이브 제목 창 출력", &g_showLiveTitleWindow); ImGui::SameLine(); HelpMarker("라이브 시작 시 제목 창을 표시합니다.");				
+				ImGui::Checkbox("라이브 카메라 멈추기", &sett->stopLiveCam); ImGui::SameLine(); HelpMarker("라이브에서 카메라 워크를 정지합니다.\n단축키: S");
+				ImGui::Checkbox("라이브 제목 창 출력", &g_sett->showLiveTitleWindow); ImGui::SameLine(); HelpMarker("라이브 시작 시 제목 창을 표시합니다.");
 				
 				BeginGroupPanel("타임라인");
 
@@ -5001,28 +5319,30 @@ int imguiwindow()
 
 				ImGui::Text("%02d:%02d / %02d:%02d", static_cast<int>(liveTimeSec) / 60, static_cast<int>(liveTimeSec) % 60,
 					static_cast<int>(liveTotalTimeSec) / 60, static_cast<int>(liveTotalTimeSec) % 60);
+				
 				if (ImGui::SliderFloat("시간 조정", &liveTimeSec, 0.0, liveTotalTimeSec, "%.3f Sec" )) {
-					isLiveTimeManual = true;
+					sett->isLiveTimeManual = true;
 				}ImGui::SameLine(); HelpMarker("라이브 타임라인을 설정합니다.\n단축키: Ctrl+LeftArrow, Ctrl+RightArrow");
 				
 				ImGui::PushMultiItemsWidths(1, ImGui::CalcItemWidth());
 				ImGui::Indent(5.0f);
 				ImGui::PushID(0);
 				if (ImGui::Button("+")) {
-					isLiveTimeManual = true;
+					sett->isLiveTimeManual = true;
 					liveTimeSec = liveTimeSec + liveTimelineManualScale;
 				}ImGui::SameLine(0, g.Style.ItemInnerSpacing.x);
 				if (ImGui::InputScalar("##scale", ImGuiDataType_Float, &liveTimelineManualScale, NULL, NULL, "%.3f")) {}; ImGui::SameLine();
 				if (ImGui::Button("-")) {
-					isLiveTimeManual = true;
+					sett->isLiveTimeManual = true;
 					liveTimeSec = liveTimeSec - liveTimelineManualScale;
 				}ImGui::SameLine();
 				ImGui::PopID();
 				ImGui::PopItemWidth();
-				if (ImGui::Checkbox("수동 조정", &isLiveTimeManual)) {
+				if (ImGui::Checkbox("수동 조정", &sett->isLiveTimeManual)) {
 					//ImGui::InsertNotification({ ImGuiToastType_Success, 3000, "Hello World! This is a success! %s", "수동 조정이 활성화되었습니다." });
 					//showAlertMessage(5.0, "수동 조정이 활성화되었습니다.");
 				} ImGui::SameLine(); HelpMarker("타임라인 수동 조정을 활성화합니다.");
+				ImGui::SliderInt("타겟 타임라인 갱신 fps 설정", &liveTimeLineFPS, 0, g_sett->maxFps);
 				EndGroupPanel();
 				//ImGui::Checkbox("isCameraShake", &IsCamShake);
 				
@@ -5030,9 +5350,9 @@ int imguiwindow()
 			
 			if (ImGui::CollapsingHeader("???", ImGuiTreeNodeFlags_DefaultOpen)) {
 				ImGui::Checkbox("키무라 챌린지", &isKimuraChallenge); ImGui::SameLine(); HelpMarker(texture_kimura, kimura_image_width, kimura_image_height, "\"야떼미로-\"");
-				ImGui::Checkbox("Urara", &g_walkMotionAllUrara); ImGui::SameLine(); HelpMarker("홈화면 캐릭터들의 도보 모션을 전부 우라라 전용 모션으로 설정합니다.");
-				ImGui::Checkbox("◆", &g_homeAllDiamond); ImGui::SameLine(); HelpMarker("Just Diamond.");
-				ImGui::Checkbox("Win.564", &g_winMotion564); ImGui::SameLine(); HelpMarker("1착 모션이 캐릭터에 관계없이 전부 골드쉽 모션으로 바뀝니다.\n어이어이, 헛소리 하지 마! 이번에야말로 고루시짱의 시대잖냐아아앗!");
+				ImGui::Checkbox("Urara", &g_sett->walkMotionAllUrara); ImGui::SameLine(); HelpMarker("홈화면 캐릭터들의 도보 모션을 전부 우라라 전용 모션으로 설정합니다.");
+				ImGui::Checkbox("◆", &g_sett->homeAllDiamond); ImGui::SameLine(); HelpMarker("Just Diamond.");
+				ImGui::Checkbox("Win.564", &g_sett->winMotion564); ImGui::SameLine(); HelpMarker("1착 모션이 캐릭터에 관계없이 전부 골드쉽 모션으로 바뀝니다.\n어이어이, 헛소리 하지 마! 이번에야말로 고루시짱의 시대잖냐아아앗!");
 				//int id = 1001;
 				//if (ImGui::InputInt("GetCharaNameByCharaId", &id, 1, 9999)) {
 				//	//_setmode(_fileno(stdout), _O_U16TEXT); // <=== Windows madness
@@ -5306,3 +5626,6 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	return ::DefWindowProc(hWnd, msg, wParam, lParam);
 }
 #pragma endregion
+
+
+

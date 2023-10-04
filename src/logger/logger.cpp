@@ -29,7 +29,7 @@ namespace logger
 	void init_logger()
 	{
 		// only output if file exists so regular user will not see it.
-		if (g_enable_logger)
+		if (g_sett->enableLogger)
 		{
 			enabled = true;
 			log_file.open("dump.txt", ios::app | ios::out);
