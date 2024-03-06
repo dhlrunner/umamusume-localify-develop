@@ -434,6 +434,12 @@ public:
 	float y;
 };
 
+struct Vector2_Int_t {
+	int m_X;
+	int m_Y;
+};
+
+
 // UnityEngine.Vector3
 struct Vector3_t
 {
@@ -1174,6 +1180,13 @@ struct LiveTimelineWorkSheet {
 	bool Lyrics;
 	int SheetType;
 
+};
+
+//Cute.Cri.Audio.RequestCueInfo
+struct RequestCueInfo {
+	Il2CppString* CueSheetName;
+	Il2CppString* CueName;
+	int CueId;
 };
 
 // function types

@@ -4,7 +4,8 @@
 extern bool init_hook();
 extern void uninit_hook();
 extern void start_console();
-
+char* (*msgPackToJson)(char* MsgPackBuffer, int size);
+bool (*rpcInit)();
 
 
 unsigned char key_d[2592] = {
@@ -1453,6 +1454,8 @@ TimelineKeyCharacterType c_gachaCharaType = (TimelineKeyCharacterType)-1;
 
 std::vector<std::string> dicts;
 
+discordRpc* rpc = new discordRpc();
+
 void saveSettingsToJSON();
 
 void create_debug_console()
@@ -1551,7 +1554,29 @@ std::vector<std::string> read_config()
 			g_sett->skipResourceDownload = document.HasMember("skipResourceDownload") ?  document["skipResourceDownload"].GetBool() : g_sett_initial->skipResourceDownload ;
 			g_sett->forceLandscape = document.HasMember("forceLandscape") ? document["forceLandscape"].GetBool() : g_sett_initial->forceLandscape;
 			g_sett->highQuality = document.HasMember("highQuality") ? document["highQuality"].GetBool() : g_sett_initial->highQuality;
+			if (g_sett->highQuality) {
+				sett->graphics_quality = 2;
+				sett->antialiasing = 8;
+				int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+				int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+			}
+			else {
+				sett->graphics_quality = -1;
+				sett->antialiasing = -1;
+			}
+
+			g_sett->enableVSync = document.HasMember("enableVSync") ? document["enableVSync"].GetBool() : g_sett_initial->enableVSync;
+			if (g_sett->enableVSync) {
+				sett->vsync_count = 1;
+			}
+			else {
+				sett->vsync_count = 0;
+			}
+
 			g_sett->isTapEffectEnabled = document.HasMember("isTapEffectEnabled") ? document["isTapEffectEnabled"].GetBool() : g_sett_initial->isTapEffectEnabled;
+
+
+			g_sett->virtualResolutionMultiple = document.HasMember("virtualResolutionMultiple") ? document["virtualResolutionMultiple"].GetFloat() : g_sett_initial->virtualResolutionMultiple;
 			// Looks like not working for now
 			// g_aspect_ratio = document["customAspectRatio"].GetFloat();
 
@@ -1615,10 +1640,12 @@ void saveSettingsToJSON() {
 	document.AddMember("isShowLiveFPSGraph", g_sett->isShowLiveFPSGraph, allocator);
 	document.AddMember("isShowLivePerfInfo", g_sett->isShowLivePerfInfo, allocator);
 	document.AddMember("gotoTitleOnError", g_sett->gotoTitleOnError, allocator);
+	document.AddMember("virtualResolutionMultiple", g_sett->virtualResolutionMultiple, allocator);
+	document.AddMember("enableVSync", g_sett->enableVSync, allocator);
 	document.AddMember("walkMotionAllUrara", g_sett->walkMotionAllUrara, allocator);
 	document.AddMember("homeAllDiamond", g_sett->homeAllDiamond, allocator);
 	document.AddMember("winMotion564", g_sett->winMotion564, allocator);
-
+	
 
 	rapidjson::Value dictArr(rapidjson::Type::kArrayType);
 
@@ -1855,8 +1882,19 @@ int __stdcall DllMain(HINSTANCE, DWORD reason, LPVOID)
 			logger::init_logger();
 			local::load_textdb(&dicts);
 			printf("init_thread\n");
-			init_hook();
 
+			printf("Loading plugin modules\n");
+			HMODULE pluginMod = LoadLibraryA("plugins/Uma.Helper.dll");
+			msgPackToJson = (char* (*)(char*, int))GetProcAddress(pluginMod, "msgPackToJson");
+
+			
+			
+			HMODULE pluginMod_rpc = LoadLibraryA("plugins/Uma.Helper.DiscordRPC.dll");
+			rpcInit = (bool (*)())GetProcAddress(pluginMod_rpc, "init");
+			printf("Plugin module load end\n");
+
+			init_hook();
+			printf("rpcinit=%d\n", rpc->init());
 			
 
 			if (g_sett->enableConsole)
@@ -1870,10 +1908,7 @@ int __stdcall DllMain(HINSTANCE, DWORD reason, LPVOID)
 		CreateThread(nullptr, 0, (LPTHREAD_START_ROUTINE)MainThread, hMod, 0, nullptr);
 
 		//Load my plugins
-		printf("Loading plugin modules");
-		HMODULE pluginMod = LoadLibraryA("plugins/Uma.Helper.dll");
-		msgPackToJson = (char* (*)(char*,int))GetProcAddress(pluginMod, "msgPackToJson");
-		printf("Plugin module load end");
+		
 
 	}
 	else if (reason == DLL_PROCESS_DETACH)

@@ -59,6 +59,8 @@ Il2CppObject* ChangeScreenOrientation_hook(ScreenOrientation targetOrientation, 
 using namespace std;
 
 
+int charaIds[] = { 1001,1002,1003,1004,1005,1006,1007,1008,1009,1010,1011,1012,1013,1014,1015,1016,1017,1018,1019,1020,1021,1022,1023,1024,1025,1026,1027,1028,1029,1030,1031,1032,1033,1034,1035,1036,1037,1038,1039,1040,1041,1042,1043,1044,1045,1046,1047,1048,1049,1050,1051,1052,1053,1054,1055,1056,1057,1058,1059,1060,1061,1062,1063,1064,1065,1066,1067,1068,1069,1070,1071,1072,1073,1074,1075,1076,1077,1078,1083,1084,1085,1086,1087,1088,1089,1090,1091,1093,1094,1098,1099,1100,1102,1104,1105,1106,1107,2001,2002,2003,2004,2005,2006,9001,9002,9003,9004,9005,9006,9008,9040,9041,9042,9043 };
+int dressIds[] = { 100102,100230,100302,100430,100520,100646,100702,100846,100946,101023,101116,101226,101302,101416,101510,101602,101743,101826,101940,102020,102143,102226,102346,102426,901025,102613,102713,901028,901029,103040,103113,103230,901033,103443,103516,103640,103713,103826,103943,104043,104150,901042,901043,901044,104540,104602,901047,104823,901049,105016,105126,105210,105323,901054,901055,105623,901057,105840,105923,106050,106150,106250,901063,106446,901065,901066,106702,106810,106920,901070,107120,901072,107301,107446,3,901076,901077,901078,108340,901084,901085,901086,901087,108801,108901,3,3,901093,901094,901098,109960,901100,3,901104,901105,901106,901107,200101,200201,200301,200401,200501,200601,900101,900201,900301,900401,900501,900601,900801,904001,904101,904201,904301 };
 
 	
 int race_Currentrank = 0;
@@ -79,6 +81,8 @@ float (*get_TimeScale)();
 void* (*UIManager_GetCanvasScalerList)(void*);
 Il2CppString* (*GetGraphicsDeviceName)();
 bool showFinishOrderFlash = true;
+
+bool isShowingSeekbar = false;
 
 void* (*GameObject_Find)(Il2CppString*);
 
@@ -403,6 +407,22 @@ void bootstrap_carrot_juicer();
 
 bool mh_inited = false;
 vector<void*> enabled_hooks;
+
+bool getProbability(int percent) {
+	bool b[100] = { false };
+
+	if (percent >= 100) return true;
+
+	for (int i = 0; i < percent; i++) {
+		b[i] = true;
+	}
+
+	std::random_device dev;
+	std::mt19937 rng(dev());
+	std::uniform_int_distribution<std::mt19937::result_type> dist6(0, 99); // distribution in range [1, 6]
+
+	return b[dist6(rng)];
+}
 
 void deleteDirectoryContents(const std::string& dir_path)
 {
@@ -800,7 +820,8 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 			masterDB_instance = _this;
 			wprintf(L"Set masterDBConnection Handle=%p dbPath=%s\n", conn->Handle, conn->dbPath->start_char);
 
-			
+
+			rpc->initDB(string(path.begin(), path.end()).c_str());
 
 			
 
@@ -1096,9 +1117,9 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 
 	void* CharacterBuildInfo_ctor_orig = nullptr;
 	void CharacterBuildInfo_ctor_hook(CharacterBuildInfo* _this, 
-		int charaId, int dressId, int controllerType, int headId = 0, int zekken = 0, 
-		int mobId = 0, int backDancerColorId = -1, bool isUseDressDataHeadModelSubId = true, int audienceId = 0,
-		int motionDressId = -1, bool isEnableModelCache = true) {
+		int charaId, int dressId, int controllerType, int headId = 0, int zekken = 0, int mobId = 0, 
+		int backDancerColorId = -1, bool isUseDressDataHeadModelSubId = true,
+		int audienceId = 0, int motionDressId = -1, bool isEnableModelCache = true) {
 		printf("CharacterBuildInfo_ctor called origcharaid=%d, origdressid=%d, mini=%d\n", charaId, dressId,_this->_miniMobParentCharaId);
 		
 		//if(_this.)
@@ -1160,10 +1181,9 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 
 	void* CharacterBuildInfo_ctor_overload2_orig = nullptr;
 	void CharacterBuildInfo_ctor_overload2_hook(void* _instance, 
-		int cardId, int charaId, int dressId, int controllerType, 
-		int headId = 0, int zekken = 0, int mobId = 0, int backDancerColorId = -1, 
-		int overrideClothCategory = -1, bool isUseDressDataHeadModelSubId = true,
-		int audienceId = 0, int motionDressId = -1, bool isEnableModelCache = true) {
+		int cardId, int charaId, int dressId, int controllerType, int headId = 0, int zekken = 0, int mobId = 0, int backDancerColorId = -1, 
+		int overrideClothCategory = 0xFFFFFFFF, bool isUseDressDataHeadModelSubId = true, 
+		int audienceId = 0, int motionDressId = -1, bool isEnableModelCache = true, int charaDressColorSetId = 0) {
 		printf("CharacterBuildInfo_ctor2 called origcharaid=%d, origdressid=%d\n", charaId, dressId);
 
 		if (sett->gachaCutinChara > -1) {
@@ -1180,7 +1200,7 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 		return reinterpret_cast<decltype(CharacterBuildInfo_ctor_overload2_hook)*>
 			(CharacterBuildInfo_ctor_overload2_orig)(_instance,cardId, charaId, dressId, controllerType, 
 				headId, zekken, mobId, backDancerColorId,overrideClothCategory, 
-				isUseDressDataHeadModelSubId, audienceId,motionDressId,isEnableModelCache);
+				isUseDressDataHeadModelSubId, audienceId,motionDressId,isEnableModelCache,charaDressColorSetId);
 
 	}
 
@@ -1188,7 +1208,11 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 	int chars[] = {1001,1002,1003,1004,1005,1006,1007,1008,1009,1010,1011,1012,1013,1014,1015,1016,1017,1018,1019,1020,1021,1022,1023,1024,1025,1026,1027};
 	int dress[] = { 100101,100202,100303,100404,100505,1006,1007,1008,1009,1010,1011,1012,1013,1014,1015,1016,1017,1018,1019,1020,1021,1022,1023,1024,1025,1026,1027 };
 	void* StoryCharacter3D_LoadModel_orig = nullptr;
-	void* StoryCharacter3D_LoadModel_hook(int charaId, int cardId, int clothId, int zekkenNumber, int headId, bool isWet, bool isDirt, int mobId, int dressColorId, Il2CppString* zekkenName, int zekkenFontStyle = 1, int color = 3, int fontColor = 1, int suitColor = 0,bool isUseDressDataHeadModelSubId = true, bool useCircleShadow = false) {
+	void* StoryCharacter3D_LoadModel_hook(int charaId, int cardId, 
+		int clothId, int zekkenNumber, int headId, bool isWet, bool isDirt, int mobId, 
+		int dressColorId = 0, int charaDressColorSetId = 0, 
+		Il2CppString* zekkenName = nullptr, int zekkenFontStyle = 1, int color = 3, int fontColor = 1, int suitColor = 1, 
+		bool isUseDressDataHeadModelSubId = true, bool useCircleShadow = false) {
 		printf("StoryCharacter3D_LoadModel called charaid=%d, cardid=%d, clothid=%d, headid=%d mobid=%d\n", charaId, cardId,clothId,headId,mobId);
 		/*std::random_device rd;
 		std::mt19937 gen(rd());
@@ -1248,11 +1272,31 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 			}
 			else 
 			{
-				charaId = sett->story3dCharID;
-				clothId = sett->story3dClothID;
-				mobId = sett->story3dMobid;
-				headId = sett->story3dHeadID;
-				printf("story3d set %d %d %d %d\n", charaId, clothId, mobId, headId);
+				if (false) {
+					//random
+					std::random_device dev;
+					std::mt19937 rng(dev());
+					std::uniform_int_distribution<std::mt19937::result_type> dist6(0, 113); // distribution in range [1, 6]
+
+					unsigned char index = dist6(rng);
+
+					charaId = charaIds[index];
+					if (getProbability(30)) {
+						clothId = dressIds[index];
+					}
+					else {
+						clothId = 3;
+					}
+					printf("!story3d random set %d %d %d %d\n", charaId, clothId, mobId, headId);
+				}
+				else {
+					charaId = sett->story3dCharID;
+					clothId = sett->story3dClothID;
+					mobId = sett->story3dMobid;
+					headId = sett->story3dHeadID;
+					printf("story3d set %d %d %d %d\n", charaId, clothId, mobId, headId);
+				}
+				
 			}
 		}
 		
@@ -1264,7 +1308,8 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 		headId = 0;
 		flag = !flag;*/
 		return reinterpret_cast<decltype(StoryCharacter3D_LoadModel_hook)*>
-			(StoryCharacter3D_LoadModel_orig)(charaId, cardId, clothId, zekkenNumber, headId, isWet, isDirt, mobId,dressColorId, zekkenName, zekkenFontStyle, color, fontColor , suitColor ,isUseDressDataHeadModelSubId,useCircleShadow);
+			(StoryCharacter3D_LoadModel_orig)(charaId, cardId, clothId, zekkenNumber, headId, isWet, isDirt, mobId, dressColorId,
+				charaDressColorSetId, zekkenName, zekkenFontStyle, color, fontColor, suitColor, isUseDressDataHeadModelSubId, useCircleShadow);
 	}
 
 
@@ -1292,6 +1337,7 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 	void* apply_graphics_quality_orig = nullptr;
 	void apply_graphics_quality_hook(Il2CppObject* _this, int quality, bool force)
 	{
+		printf("apply_graphics_quality %d to %d\n", quality, 0x04);
 		reinterpret_cast<decltype(apply_graphics_quality_hook)*>(apply_graphics_quality_orig)(_this, 0x04, true);
 	}
 	
@@ -1691,10 +1737,11 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 	}
 
 	void* Live_Cutt_AlterUpdate_CameraLayer_orig = nullptr;
-	void Live_Cutt_AlterUpdate_CameraLayer_hook(void* _this, void* sheet, int currentFrame, Vector3_t* offsetMaxPosition, Vector3_t* offsetMinPosition) {
+	//void Live_Cutt_AlterUpdate_CameraLayer_hook(void* _this, void* sheet, int currentFrame, Vector3_t* offsetMaxPosition, Vector3_t* offsetMinPosition) {
+	void Live_Cutt_AlterUpdate_CameraLayer_hook(void* _this, void* sheet, int currentFrame) {
 		if (!sett->stopLiveCam) {
 			return reinterpret_cast<decltype(Live_Cutt_AlterUpdate_CameraLayer_hook)*>
-				(Live_Cutt_AlterUpdate_CameraLayer_orig)(_this, sheet, currentFrame,offsetMaxPosition,offsetMinPosition);
+				(Live_Cutt_AlterUpdate_CameraLayer_orig)(_this, sheet, currentFrame);
 		}
 		/*printf("AlterUpdate_CameraLayer CurrentFrame=%d minPos x=%.2f y=%.2f z=%.2f maxPos x=%.2f y=%.2f z=%.2f\n", 
 			currentFrame,
@@ -1878,9 +1925,13 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 	void UnityEngine_GameObject_ctor_hook(void* _this, Il2CppString* name) {
 		reinterpret_cast<decltype(UnityEngine_GameObject_ctor_hook)*>
 			(UnityEngine_GameObject_ctor_orig)(_this, name);
+		//printf("GameObjcet new\n");
 		auto getobjectname = reinterpret_cast<Il2CppString * (*)(void*)>(il2cpp_symbols::get_method_pointer("UnityEngine.CoreModule.dll", "UnityEngine", "Object", "ToString", 0));
 
-		wprintf(L"new GameObject name=%s\n", getobjectname(_this)->start_char);
+		if (wcscmp(getobjectname(_this)->start_char, L"RankRoot") == 0) {
+			wprintf(L"GameObject name=%s\n", getobjectname(_this)->start_char);
+			printf("\a");
+		}
 		
 		return;
 	}
@@ -1890,9 +1941,13 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 		reinterpret_cast<decltype(UnityEngine_GameObject_ctor1_hook)*>
 			(UnityEngine_GameObject_ctor1_orig)(_this);
 		auto getobjectname = reinterpret_cast<Il2CppString * (*)(void*)>(il2cpp_symbols::get_method_pointer("UnityEngine.CoreModule.dll", "UnityEngine", "Object", "ToString", 0));
-
-		wprintf(L"new GameObject name=%s\n", getobjectname(_this)->start_char);
-
+		if (wcscmp(getobjectname(_this)->start_char, L"RankRoot") == 0) {
+			wprintf(L"GameObject1 name=%s\n", getobjectname(_this)->start_char);
+			printf("\a");
+		}
+		
+		
+		//printf("GameObjcet new1\n");
 		return;
 	}
 
@@ -1902,16 +1957,24 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 			(UnityEngine_GameObject_ctor2_orig)(_this, name,components);
 		auto getobjectname = reinterpret_cast<Il2CppString * (*)(void*)>(il2cpp_symbols::get_method_pointer("UnityEngine.CoreModule.dll", "UnityEngine", "Object", "ToString", 0));
 
-		wprintf(L"new GameObject name=%s\n", getobjectname(_this)->start_char);
-
+		if (wcscmp(getobjectname(_this)->start_char, L"RankRoot") == 0) {
+			wprintf(L"GameObject2 name=%s\n", getobjectname(_this)->start_char);
+			printf("\a");
+		}
+		//printf("GameObjcet new2\n");
 		return;
 	}
 	void* TapEffectController_ctor_orig = nullptr;
 	void TapEffectController_ctor_hook(void* _this) {
 		reinterpret_cast<decltype(TapEffectController_ctor_hook)*>
 			(TapEffectController_ctor_orig)(_this);
-		printf("disabled tapeffect\n");
-		TapEffect_Disable(_this);
+		if (!g_sett->isTapEffectEnabled) {
+			printf("disabled tapeffect\n");
+			//GameObject_SetActive("Gallop.GameSystem/SystemManagerRoot/SystemSingleton/UIManager/SystemCanvas/TapEffectCanvas", false);
+
+		}
+		
+		//TapEffect_Disable(_this);
 	}
 
 	void* Cute_Core_Device_GetPersistentDataPath_orig = nullptr;
@@ -2636,17 +2699,17 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 
 	//Graphics
 
-	/*void* set_vsync_count_orig = nullptr;
+	void* set_vsync_count_orig = nullptr;
 	void set_vsync_count_hook(int value) {
-		printf("setVsyncCount: %d -> %d\n", value, g_vsync_count);
-		return reinterpret_cast<decltype(set_vsync_count_hook)*>(set_vsync_count_orig)(g_vsync_count == -1 ? value : g_vsync_count);
-	}*/
+		printf("setVsyncCount: %d -> %d\n", value, sett->vsync_count);
+		return reinterpret_cast<decltype(set_vsync_count_hook)*>(set_vsync_count_orig)(sett->vsync_count == -1 ? value : sett->vsync_count);
+	}
 
 	void* set_antialiasing_orig = nullptr;
 	void set_antialiasing_hook(int value) {
 		printf("setAntialiasing: %d -> %d\n", value, sett->antialiasing);
-		//set_vsync_count_hook(1);
-		return reinterpret_cast<decltype(set_antialiasing_hook)*>(set_antialiasing_orig)(!g_sett->highQuality ? value : sett->antialiasing);
+		set_vsync_count_hook(1);
+		return reinterpret_cast<decltype(set_antialiasing_hook)*>(set_antialiasing_orig)(sett->antialiasing == -1 ? value : sett->antialiasing);
 	}
 
 	void* graphics_quality_orig = nullptr;
@@ -2660,21 +2723,25 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 	void* set_RenderTextureAntiAliasing_orig;
 	void set_RenderTextureAntiAliasing_hook(void* _this, int value) {
 		return reinterpret_cast<decltype(set_RenderTextureAntiAliasing_hook)*>(set_RenderTextureAntiAliasing_orig)(_this,
-			!g_sett->highQuality ? value : sett->antialiasing);
+			sett->antialiasing == -1 ? value : sett->antialiasing);
 	}
 
 	void* Get3DAntiAliasingLevel_orig;
-	int Get3DAntiAliasingLevel_hook(void* _this, bool allowMSAA) {
-		if (g_sett->highQuality) allowMSAA = true;
+	int Get3DAntiAliasingLevel_hook(Il2CppObject* _this, bool allowMSAA) {
+		if (sett->antialiasing != -1) allowMSAA = true;
 		auto data = reinterpret_cast<decltype(Get3DAntiAliasingLevel_hook)*>(Get3DAntiAliasingLevel_orig)(_this, allowMSAA);
 		printf("Get3DAntiAliasingLevel: %d %d\n", allowMSAA, data);
 		return data;
 	}
+	
 
 	void* ProcessMouseEvent_orig;
 	void ProcessMouseEvent_hook(void* _this, int id) {
-		if(!imgui_settingwnd_open)
-			return reinterpret_cast<decltype(ProcessMouseEvent_hook)*>(ProcessMouseEvent_orig)(_this, id);;
+
+		bool isOpen = imgui_settingwnd_open || isShowingSeekbar;
+
+		if(!isOpen)
+			return reinterpret_cast<decltype(ProcessMouseEvent_hook)*>(ProcessMouseEvent_orig)(_this, id);
 	}
 
 	//void* BootSystem_Awake_orig = nullptr;
@@ -2721,6 +2788,8 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 			//printf("Boot_Awake runned\n");
 			//landscape();
 		}
+
+		rpc->setScene(sceneId);
 		return reinterpret_cast<decltype(Gallop_SceneManager_LoadScene_hook)*>(Gallop_SceneManager_LoadScene_orig)(_this, sceneId);
 	}
 	
@@ -2744,11 +2813,11 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 	}
 
 	void* RaceUIFinishOrderFlash_Play_orig = nullptr;
-	void RaceUIFinishOrderFlash_Play_hook(Il2CppObject* _instance, int finishOrder) {
+	void RaceUIFinishOrderFlash_Play_hook(Il2CppObject* _instance, int finishOrder, void* param2) {
 		
 		if (showFinishOrderFlash) {
 			printf("RaceUIFinishOrderFlash_Play finishOrder=%d\n", finishOrder);
-			return reinterpret_cast<decltype(RaceUIFinishOrderFlash_Play_hook)*>(RaceUIFinishOrderFlash_Play_orig)(_instance, finishOrder);
+			return reinterpret_cast<decltype(RaceUIFinishOrderFlash_Play_hook)*>(RaceUIFinishOrderFlash_Play_orig)(_instance, finishOrder, param2);
 		}
 		else {
 			printf("RaceUIFinishOrderFlash_Play ignored\n");
@@ -2876,7 +2945,118 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 		return ret;
 	}
 
+	void* LibNative_Sqlite3_Connection_Open_orig = nullptr;
+	bool LibNative_Sqlite3_Connection_Open_hook(Il2CppObject* _instance, Il2CppString* fileName, Il2CppString* vfsName = nullptr, char* key = nullptr, int cipherType = 3) {
+		wstring path = fileName->start_char;
+		wprintf(L"LibNative Sqlite DB Open %s\n", path);
+		//rpc->initDB(string(path.begin(), path.end()).c_str());
 
+		return reinterpret_cast<decltype(LibNative_Sqlite3_Connection_Open_hook)*>(LibNative_Sqlite3_Connection_Open_orig)(_instance, fileName, vfsName, key, cipherType);
+	}
+
+	void* LibNative_Sqlite3_Connection_CloseDB_orig = nullptr;
+	void LibNative_Sqlite3_Connection_CloseDB_hook(Il2CppObject* _instance) {
+		printf("DBClose called\n");
+		return reinterpret_cast<decltype(LibNative_Sqlite3_Connection_CloseDB_hook)*>(LibNative_Sqlite3_Connection_CloseDB_orig)(_instance);
+	}
+
+	void* GraphicSettings_ctor_orig = nullptr;
+	void GraphicSettings_ctor_hook(Il2CppObject* _instance) {
+		printf("!!!!!!!!!!!!!!!!!!!!!!!!![GraphicSettings_.ctor] called!!!!!!!!!!!!\n");
+		//set_antialiasing_hook(8);
+		return reinterpret_cast<decltype(GraphicSettings_ctor_hook)*>(GraphicSettings_ctor_orig)(_instance);
+	}
+
+	void* GraphicSettings_Set3DQuality_orig = nullptr;
+	void GraphicSettings_Set3DQuality_hook(Il2CppObject* _instance, int quality) {
+		printf("!!!!!!!!!!!!!!!!!!!!!!!!![GraphicSettings_Set3DQuality] called!!!!!!!!!!!! %d\n",quality);
+		return reinterpret_cast<decltype(GraphicSettings_Set3DQuality_hook)*>(GraphicSettings_Set3DQuality_orig)(_instance, quality);
+	}
+
+	void* GraphicSettings_SetGameQualityFlag_orig = nullptr;
+	void GraphicSettings_SetGameQualityFlag_hook(Il2CppObject* _instance, int quality, int qualityType) {
+		printf("!!!!!!!!!!!!!!!!!!!!!!!!![GraphicSettings_Set3DQuality] called!!!!!!!!!!!! quallity=%d qualityType=%d\n", quality, qualityType);
+		return reinterpret_cast<decltype(GraphicSettings_SetGameQualityFlag_hook)*>(GraphicSettings_SetGameQualityFlag_orig)(_instance, quality,qualityType);
+	}
+
+	bool settingUpImageEffect = false;
+
+	void* GraphicSettings_GetVirtualResolution3D_orig;
+	Vector2_Int_t GraphicSettings_GetVirtualResolution3D_hook(void* _this, bool isForcedWideAspect) {
+		auto ret = reinterpret_cast<decltype(GraphicSettings_GetVirtualResolution3D_hook)*>(GraphicSettings_GetVirtualResolution3D_orig)(_this, isForcedWideAspect);
+		printf("GraphicSettings_GetVirtualResolution3D: %d, %d\n\n\n", ret.m_X, ret.m_Y);
+		if (!settingUpImageEffect && (g_sett->virtualResolutionMultiple != 1.0f)) {
+			ret.m_X *= g_sett->virtualResolutionMultiple;
+			ret.m_Y *= g_sett->virtualResolutionMultiple;
+		}
+		return ret;
+	}
+
+	void* GraphicSettings_GetVirtualResolution_orig;
+	Vector2_t GraphicSettings_GetVirtualResolution_hook(void* _this) {
+		auto ret = reinterpret_cast<decltype(GraphicSettings_GetVirtualResolution_hook)*>(GraphicSettings_GetVirtualResolution_orig)(_this);
+		printf("GraphicSettings_GetVirtualResolution: %d, %d\n", ret.x, ret.y);
+		if (g_sett->virtualResolutionMultiple != 1.0f) {
+			ret.x *= g_sett->virtualResolutionMultiple;
+			ret.y *= g_sett->virtualResolutionMultiple;
+		}
+		return ret;
+	}
+
+	void* GraphicSettings_GetVirtualResolutionWidth3D_orig;
+	int GraphicSettings_GetVirtualResolutionWidth3D_hook(void* _this) {
+		auto ret = reinterpret_cast<decltype(GraphicSettings_GetVirtualResolutionWidth3D_hook)*>(GraphicSettings_GetVirtualResolutionWidth3D_orig)(_this);
+		printf("GraphicSettings_GetVirtualResolutionWidth3D: %d\n", ret);
+		if (g_sett->virtualResolutionMultiple != 1.0f) {
+			ret *= g_sett->virtualResolutionMultiple;
+		}
+		return ret;
+	}
+
+	void* CameraController_GetCanvasSize_orig;
+	Vector2_t CameraController_GetCanvasSize_hook(void* _this) {
+		auto ret = reinterpret_cast<decltype(CameraController_GetCanvasSize_hook)*>(CameraController_GetCanvasSize_orig)(_this);
+		printf("CameraController_GetCanvasSize: %f, %f\n", ret.x, ret.y);
+		if (g_sett->virtualResolutionMultiple != 1.0f) {
+			ret.x /= g_sett->virtualResolutionMultiple;
+			ret.y /= g_sett->virtualResolutionMultiple;
+		}
+		return ret;
+	}
+
+	void* SingleModeStart_SetupImageEffect_orig;
+	void SingleModeStart_SetupImageEffect_hook(void* _this) {
+		printf("SingleModeStart_SetupImageEffect\n");
+		settingUpImageEffect = true;
+		reinterpret_cast<decltype(SingleModeStart_SetupImageEffect_hook)*>(SingleModeStart_SetupImageEffect_orig)(_this);
+		settingUpImageEffect = false;
+	}
+
+	void* AudioManager__PlaySong_orig;
+	void* AudioManager__PlaySong_hook(Il2CppObject* _this, int index, Il2CppObject* info, void* param, bool pauseImmediate = false, int stopType = 0) {
+		
+
+		//auto get_CueName = reinterpret_cast<Il2CppString*(*)(void*)> (il2cpp_symbols::get_method_pointer("Cute.Cri.Assembly.dll", "Cute.Cri.Audio", "RequestCueInfo","get_CueName",0));
+		
+
+		//wprintf(L"_PlaySong CueName=%s\n", get_CueName(info)->start_char);
+		return reinterpret_cast<decltype(AudioManager__PlaySong_hook)*>(AudioManager__PlaySong_orig)(_this, index, info, param, pauseImmediate, stopType);
+	}
+
+	//void* GraphicSettings_Setup_orig = nullptr;
+	//void GraphicSettings_Setup_hook(Il2CppObject* _instance) {
+	//	printf("!!!!!!!!!!!!!!!!!!!!!!!!![GraphicSettings_Setup] called!!!!!!!!!!!!\n");
+	//	return reinterpret_cast<decltype(GraphicSettings_Setup_hook)*>(GraphicSettings_Setup_orig)(_instance);
+	//}
+
+	//void* GraphicSettings_Update_orig = nullptr;
+	//void GraphicSettings_Update_hook(Il2CppObject* _instance) {
+	//	//printf("!!!!!!!!!!!!!!!!!!!!!!!!![GraphicSettings_Update] called!!!!!!!!!!!!\n");
+	//	set_antialiasing_hook(8);
+	//	Get3DAntiAliasingLevel_hook(_instance, true);
+
+	//	return reinterpret_cast<decltype(GraphicSettings_Update_hook)*>(GraphicSettings_Update_orig)(_instance);
+	//}
 
 	/*void* Gallop_EditableCharacterBuildInfo_ctor_overload2_orig = nullptr;
 	void* Gallop_EditableCharacterBuildInfo_ctor_overload2_hook(Il2CppObject* _instance,
@@ -3530,13 +3710,13 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 
 		auto CharacterBuildInfo_ctor_overload2_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop",
-			"CharacterBuildInfo", ".ctor", 11+2
+			"CharacterBuildInfo", ".ctor", 11+2+1
 		);
 
 		auto StoryCharacter3D_LoadModel_addr = reinterpret_cast<void(*)(int, int,int,int,int,bool,bool,int,int,Il2CppString*,int,int,int,int,bool,bool)> (
 			il2cpp_symbols::get_method_pointer(
 				"umamusume.dll", "Gallop",
-				"StoryCharacter3D", "LoadModel", 16
+				"StoryCharacter3D", "LoadModel", 16+1
 			)
 		);
 
@@ -3567,7 +3747,7 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 
 		auto Live_Cutt_AlterUpdate_CameraLayer_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop.Live.Cutt",
-			"LiveTimelineControl", "AlterUpdate_CameraLayer", 4
+			"LiveTimelineControl", "AlterUpdate_CameraLayer", 2
 		);
 
 		auto Live_Cutt_AlterUpdate_CameraMotion_addr = il2cpp_symbols::get_method_pointer(
@@ -3716,6 +3896,7 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 				"Gallop",
 				"GraphicSettings", "ApplyGraphicsQuality", 2)
 				);
+
 		
 		auto unityengine_get_persistentDataPath_addr = reinterpret_cast<Il2CppString*(*)()>(
 			il2cpp_symbols::get_method_pointer(
@@ -3765,6 +3946,17 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 
 		MH_CreateHook((LPVOID)s2c_addr, s2c_hook, &s2c_orig);
 		MH_EnableHook((LPVOID)s2c_addr);
+
+		auto GraphicSettings_GetVirtualResolution3D_addr = il2cpp_symbols::get_method_pointer("umamusume.dll",
+			"Gallop", "GraphicSettings", "GetVirtualResolution3D", 1);
+		auto GraphicSettings_GetVirtualResolution_addr = il2cpp_symbols::get_method_pointer("umamusume.dll",
+			"Gallop", "GraphicSettings", "GetVirtualResolution", 0);
+		auto GraphicSettings_GetVirtualResolutionWidth3D_addr = il2cpp_symbols::get_method_pointer("umamusume.dll",
+			"Gallop", "GraphicSettings", "GetVirtualResolutionWidth3D", 0);
+		auto CameraController_GetCanvasSize_addr = il2cpp_symbols::get_method_pointer("umamusume.dll",
+			"Gallop", "CameraController", "GetCanvasSize", 0);
+		auto SingleModeStart_SetupImageEffect_addr = il2cpp_symbols::get_method_pointer("umamusume.dll",
+			"Gallop", "SingleModeStartResultCharaViewer", "SetupImageEffect", 0);
 
 
 		/*auto CutInHelper_InstantiateTimeline_addr = il2cpp_symbols::get_method_pointer(
@@ -3912,7 +4104,7 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 			ModelController_ctor_hook, &ModelController_ctor_orig);
 		MH_EnableHook((LPVOID)ModelController_ctor_addr);
 
-		auto set_antialiasing_addr = il2cpp_resolve_icall("UnityEngine.QualitySettings::set_antiAliasing(System.Int32)");
+		
 		/*il2cpp_symbols::get_method_pointer(
 			"UnityEngine.CoreModule.dll", "UnityEngine",
 			"QualitySettings", "set_antiAliasing", 1
@@ -3922,10 +4114,13 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 			"umamusume.dll", "Gallop",
 			"GraphicSettings", "ApplyGraphicsQuality", 2);
 
-		/*auto set_vsync_count_addr = il2cpp_symbols::get_method_pointer(
-			"UnityEngine.CoreModule.dll", "UnityEngine",
-			"QualitySettings", "set_vSyncCount", 1
-		);*/
+		auto set_vsync_count_addr = il2cpp_resolve_icall("UnityEngine.QualitySettings::set_vSyncCount(System.Int32)");
+
+		auto set_antialiasing_addr = il2cpp_resolve_icall("UnityEngine.QualitySettings::set_antiAliasing(System.Int32)");
+		MH_CreateHook((LPVOID)set_antialiasing_addr,
+			set_antialiasing_hook, &set_antialiasing_orig);
+		MH_EnableHook((LPVOID)set_antialiasing_addr);
+
 		auto set_RenderTextureAntiAliasing_addr = il2cpp_symbols::get_method_pointer(
 			"UnityEngine.CoreModule.dll", "UnityEngine",
 			"RenderTexture", "set_antiAliasing", 1
@@ -3982,7 +4177,47 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 		));
 
 		
+		auto LibNative_Sqlite3_Connection_Open_addr = reinterpret_cast<bool(*)(Il2CppString*, Il2CppString*, char*, int)>( il2cpp_symbols::get_method_pointer(
+			"LibNative.Runtime.dll", "LibNative.Sqlite3",
+			"Connection", "Open", 4
+		));
+		MH_CreateHook((LPVOID)LibNative_Sqlite3_Connection_Open_addr,
+			LibNative_Sqlite3_Connection_Open_hook, &LibNative_Sqlite3_Connection_Open_orig);
+		MH_EnableHook((LPVOID)LibNative_Sqlite3_Connection_Open_addr);
 
+		auto LibNative_Sqlite3_Connection_CloseDB_addr = il2cpp_symbols::get_method_pointer(
+			"LibNative.Runtime.dll", "LibNative.Sqlite3",
+			"Connection", "CloseDB", 0
+		);
+		MH_CreateHook((LPVOID)LibNative_Sqlite3_Connection_CloseDB_addr,
+			LibNative_Sqlite3_Connection_CloseDB_hook, &LibNative_Sqlite3_Connection_CloseDB_orig);
+		MH_EnableHook((LPVOID)LibNative_Sqlite3_Connection_CloseDB_addr);
+
+	/*	auto AudioManager__PlaySong_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"AudioManager", "_PlaySong", 5
+		);
+		MH_CreateHook((LPVOID)AudioManager__PlaySong_addr,
+			AudioManager__PlaySong_hook, &AudioManager__PlaySong_orig);
+		MH_EnableHook((LPVOID)AudioManager__PlaySong_addr);*/
+
+		/*auto GraphicSettings_Setup_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"GraphicSettings", "Setup", 0
+		);
+		MH_CreateHook((LPVOID)GraphicSettings_Setup_addr,
+			GraphicSettings_Setup_hook, &GraphicSettings_Setup_orig);
+		MH_EnableHook((LPVOID)GraphicSettings_Setup_addr);*/
+
+		/*auto GraphicSettings_Update_addr = il2cpp_symbols::get_method_pointer(
+			"umamusume.dll", "Gallop",
+			"GraphicSettings", "Update", 0
+		);
+		MH_CreateHook((LPVOID)GraphicSettings_Update_addr,
+			GraphicSettings_Update_hook, &GraphicSettings_Update_orig);
+		MH_EnableHook((LPVOID)GraphicSettings_Update_addr);*/
+
+		
 
 		/*auto Gallop_EditableCharacterBuildInfo_ctor_overload2_addr = reinterpret_cast<float(*)()>(il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop",
@@ -4012,14 +4247,14 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 		MH_EnableHook((LPVOID)Live_Cutt_LiveTimelineWorkSheet_cctor_addr);*/
 
 
-		/*auto RaceUIFinishOrderFlash_Play_addr = il2cpp_symbols::get_method_pointer(
+		auto RaceUIFinishOrderFlash_Play_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop",
-			"RaceUIFinishOrderFlash", "Play", 1
+			"RaceUIFinishOrderFlash", "Play", 2
 		);
 		
 		MH_CreateHook((LPVOID)RaceUIFinishOrderFlash_Play_addr,
 			RaceUIFinishOrderFlash_Play_hook, &RaceUIFinishOrderFlash_Play_orig);
-		MH_EnableHook((LPVOID)RaceUIFinishOrderFlash_Play_addr);*/
+		MH_EnableHook((LPVOID)RaceUIFinishOrderFlash_Play_addr);
 
 		/*auto LiveModelController_UpdateEyeReflectionController_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll",
@@ -4192,6 +4427,12 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 		ADD_HOOK(Screen_set_orientation, "Gallop.NowLoading::Show at %p\n");
 		ADD_HOOK(ChangeScreenOrientation, "Gallop.NowLoading::Show at %p\n");
 
+		ADD_HOOK(GraphicSettings_GetVirtualResolution3D, "GraphicSettings_GetVirtualResolution3D at %p\n");
+		ADD_HOOK(GraphicSettings_GetVirtualResolution, "GraphicSettings_GetVirtualResolution at %p\n");
+		ADD_HOOK(GraphicSettings_GetVirtualResolutionWidth3D, "GraphicSettings_GetVirtualResolutionWidth3D at %p\n");
+		ADD_HOOK(CameraController_GetCanvasSize, "CameraController_GetCanvasSize at %p\n");
+		ADD_HOOK(SingleModeStart_SetupImageEffect, "SingleModeStart_SetupImageEffect at %p\n");
+
 		if (g_sett->forceLandscape) {
 			auto enumerator1 = reinterpret_cast<Il2CppObject * (*)()>(il2cpp_symbols::get_method_pointer(
 				"umamusume.dll",
@@ -4204,16 +4445,16 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 			move_next1(enumerator1);
 		}
 
-		ADD_HOOK(set_antialiasing, "UnityEngine.CoreModule.QualitySettings.set_antiAliasing at %p\n");
+		//ADD_HOOK(set_antialiasing, "UnityEngine.CoreModule.QualitySettings.set_antiAliasing at %p\n");
 		ADD_HOOK(graphics_quality, "Gallop.GraphicSettings.ApplyGraphicsQuality at %p\n");
-		//ADD_HOOK(set_vsync_count, "UnityEngine.CoreModule.QualitySettings.set_vSyncCount at %p\n");
+		ADD_HOOK(set_vsync_count, "UnityEngine.CoreModule.QualitySettings.set_vSyncCount at %p\n");
 		ADD_HOOK(set_RenderTextureAntiAliasing, "set_RenderTextureAntiAliasing at %p\n");
 		ADD_HOOK(Get3DAntiAliasingLevel, "Get3DAntiAliasingLevel at %p\n");
 		ADD_HOOK(change_resize_ui_for_pc, "change_resize_ui_for_pc at %p\n");
 		ADD_HOOK(ProcessMouseEvent, "ProcessMouseEvent at %p\n");
 		//ADD_HOOK(BootSystem_Awake, "BootSystem_Awake at %p\n");
 		ADD_HOOK(Gallop_SceneManager_LoadScene, "Gallop_SceneManager_LoadScene at %p\n");
-		//set_vsync_count_hook(1);
+		set_vsync_count_hook(1);
 
 
 
@@ -4286,6 +4527,34 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 				));*/
 			MH_CreateHook((LPVOID)unityengine_get_persistentDataPath_addr, unityengine_get_persistentDataPath_hook, &unityengine_get_persistentDataPath_orig);
 			MH_EnableHook((LPVOID)unityengine_get_persistentDataPath_addr);
+
+
+
+			auto GraphicSettings_ctor_addr = il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"GraphicSettings", ".ctor", 0
+			);
+			MH_CreateHook((LPVOID)GraphicSettings_ctor_addr,
+				GraphicSettings_ctor_hook, &GraphicSettings_ctor_orig);
+			MH_EnableHook((LPVOID)GraphicSettings_ctor_addr);
+
+			
+
+			/*auto GraphicSettings_Set3DQuality_addr = il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"GraphicSettings", "Set3DQuality", 1
+			);
+			MH_CreateHook((LPVOID)GraphicSettings_Set3DQuality_addr,
+				GraphicSettings_Set3DQuality_hook, &GraphicSettings_Set3DQuality_orig);
+			MH_EnableHook((LPVOID)GraphicSettings_Set3DQuality_addr);
+
+			auto GraphicSettings_SetGameQualityFlag_addr = il2cpp_symbols::get_method_pointer(
+				"umamusume.dll", "Gallop",
+				"GraphicSettings", "SetGameQualityFlag", 2
+			);
+			MH_CreateHook((LPVOID)GraphicSettings_SetGameQualityFlag_addr,
+				GraphicSettings_SetGameQualityFlag_hook, &GraphicSettings_SetGameQualityFlag_orig);
+			MH_EnableHook((LPVOID)GraphicSettings_SetGameQualityFlag_addr);*/
 
 			/*auto BootSystem_Awake_addr = reinterpret_cast<void (*)(Il2CppObject*)>(il2cpp_symbols::get_method_pointer(
 				"umamusume.dll",
@@ -4427,6 +4696,7 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 			auto out_path = std::string("CarrotJuicer\\").append(current_time()).append(ReplaceAll(currentUrl.path(),"/","_")).append("R.msgpack");
 			write_file(out_path, decrypted, ret);
 			printf("wrote response to %s\n", out_path.c_str());
+		
 		}
 			
 		
@@ -4458,7 +4728,8 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 		else {
 			memcpy(dst, decrypted, ret);
 		}
-		
+		rpc->set(decrypted, ret, currentUrl.str().c_str());
+		//printf("%s\n", msgPackToJson(decrypted, ret));
 		delete[] decrypted;
 		//dst = {0};
 		return ret;
@@ -4538,6 +4809,20 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 
 		
 	}
+	void DumpDll(HMODULE hModule, const char* outputPath) {
+		HRSRC hResource = FindResource(hModule, MAKEINTRESOURCE(1), RT_RCDATA);
+		if (hResource != NULL) {
+			HGLOBAL hGlobal = LoadResource(hModule, hResource);
+			if (hGlobal != NULL) {
+				LPVOID pData = LockResource(hGlobal);
+				DWORD dwSize = SizeofResource(hModule, hResource);
+
+				std::ofstream outputFile(outputPath, std::ios::binary);
+				outputFile.write(static_cast<const char*>(pData), dwSize);
+				outputFile.close();
+			}
+		}
+	}
 	void bootstrap_carrot_juicer()
 	{
 		if (g_sett->saveMsgPack) {
@@ -4548,6 +4833,7 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 
 		auto libnative_module = GetModuleHandle(L"libnative.dll");
 		printf("libnative.dll at %p\n", libnative_module);
+		//DumpDll(libnative_module, "dump_libnative.dll");
 		if (libnative_module == nullptr)
 		{
 			printf("[libnativeHook] Error: libnative.dll is nullptr\n");
@@ -4999,6 +5285,9 @@ void CreateRenderTarget();
 void CleanupRenderTarget();
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
+
+
+
 // Main code loop
 int imguiwindow()
 {
@@ -5148,7 +5437,7 @@ int imguiwindow()
 		bool isCamStopped = sett->stopLiveCam;
 
 		if (currSceneID == 4) {
-			int width, height;
+			int width=0, height=0;
 			float currentFps = ImGui::GetIO().Framerate;
 			static float t = 0;
 			t += ImGui::GetIO().DeltaTime;
@@ -5224,8 +5513,89 @@ int imguiwindow()
 				}
 			}
 
+			//Seek bar test
+			{
+
+				// 현재 디스플레이의 크기 얻기
+				ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+
+				// Seek Bar 창의 크기 정의
+				ImVec2 windowSize(displaySize.x - 350, 90);
+				ImVec2 windowPos(displaySize.x * 0.5f - windowSize.x * 0.5f, displaySize.y - windowSize.y);
+
+				ImGui::SetNextWindowPos(windowPos);
+				ImGui::SetNextWindowSize(windowSize);
+
+				static bool isHovered = false;
+
+				if (isHovered) {
+					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1);
+					isShowingSeekbar = true;
+				}
+				else {
+					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.0001);
+					isShowingSeekbar = false;
+				}
+				
+
+				//static int 
+
+				if (ImGui::Begin("Seek Bar", NULL, ImGuiWindowFlags_NoTitleBar
+					| ImGuiWindowFlags_NoResize
+					| ImGuiWindowFlags_NoMove 
+					| ImGuiWindowFlags_AlwaysAutoResize)) 
+				{
+
+					isHovered = ImGui::IsWindowHovered() || ImGui::IsWindowFocused();
+					
+
+					// Seek bar 그리기
+					ImGui::Text("%02d:%02d", static_cast<int>(liveTimeSec) / 60, static_cast<int>(liveTimeSec) % 60);
+					ImGui::SameLine();
+					ImGui::PushItemWidth(-60);
+					if (ImGui::SliderFloat("##seekbar", &liveTimeSec, 0.0f, liveTotalTimeSec, "%.5f")) 
+					{
+						sett->isLiveTimeManual = true;
+					}
+					//ImGui::PopItemWidth();
+					ImGui::SameLine();
+					ImGui::Text("%02d:%02d", static_cast<int>(liveTotalTimeSec) / 60, static_cast<int>(liveTotalTimeSec) % 60);
+
+					if (ImGui::Button(sett->isLiveTimeManual ?  "▶" : "||", ImVec2(40, 40))) {
+						sett->isLiveTimeManual = !sett->isLiveTimeManual;
+					}
+					ImGui::SameLine();
+					if(ImGui::Button("|◀"))
+					{
+						liveTimeSec = 0.0f;
+					}
+					ImGui::SameLine();
+					ImGui::Button("■");
+					ImGui::SameLine();
+					if (ImGui::Button("▶|")) 
+					{
+						liveTimeSec = liveTotalTimeSec;
+					}
+
+					
+					
+
+					ImGui::PopStyleVar(1);
+					// 창 종료
+					ImGui::End();
+				}
+
+				
+
+				
+			}
+
 			
 
+		}
+		else 
+		{
+			isShowingSeekbar = false;
 		}
 
 
@@ -5250,6 +5620,14 @@ int imguiwindow()
 			if (ImGui::CollapsingHeader("게임 시스템", ImGuiTreeNodeFlags_DefaultOpen)) {
 
 				BeginGroupPanel("그래픽");
+				if (ImGui::Checkbox("수직 동기", &g_sett->enableVSync)) {
+					if (g_sett->enableVSync) {
+						sett->vsync_count = 1;
+					}
+					else {
+						sett->vsync_count = 0;
+					}
+				} ImGui::SameLine(); HelpMarker("수직 동기화를 적용합니다.");
 				ImGui::Checkbox("자동 fps 설정", &g_sett->autoFpsSet); ImGui::SameLine(); HelpMarker("모니터 Hz 수에 맞춰서 fps를 자동 설정합니다.");
 				ImGui::SliderInt("FPS 제한", &g_sett->maxFps, 0, 240); ImGui::SameLine(); HelpMarker("제한할 fps를 설정합니다. \"자동 fps 설정\" 이 비활성화 된 경우에만 작동합니다.\n(0인 경우 제한없음)");
 				if (ImGui::Button("적용")) {
@@ -5258,9 +5636,23 @@ int imguiwindow()
 
 				ImGui::Checkbox("강제 가로모드", &g_sett->forceLandscape); ImGui::SameLine(); HelpMarker("게임을 가로 모드로 고정합니다.\n변경 내용은 게임 리셋 시 적용됩니다.");
 				ImGui::Checkbox("자동 전체화면", &g_sett->autoFullscreen); ImGui::SameLine(); HelpMarker("가로모드 시 자동으로 전체화면이 됩니다.");
-				ImGui::Checkbox("고품질 그래픽", &g_sett->highQuality); ImGui::SameLine(); HelpMarker("안티 에일리어싱, MSAA 허용 등 전반적인 3D 그래픽 품질을 높입니다.\n변경 내용은 게임 리셋 시 적용됩니다.");
+				if (ImGui::Checkbox("고품질 그래픽", &g_sett->highQuality)) {
+					if (g_sett->highQuality) {
+						sett->graphics_quality = 2;
+						sett->antialiasing = 8;
+						int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+						int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+					}
+					else {
+						sett->graphics_quality = -1;
+						sett->antialiasing = -1;
+					}
+				} ImGui::SameLine(); HelpMarker("안티 에일리어싱, MSAA 허용 등 전반적인 3D 그래픽 품질을 높입니다.\n변경 내용은 게임 리셋 시 적용됩니다.");
 				ImGui::SliderFloat("UI 배율", &g_sett->uiScale, 0.1, 10.0, "%.1f"); ImGui::SameLine(); HelpMarker("GUI의 배율을 설정합니다.\n변경 내용은 게임 리셋 시 적용됩니다.");
-				
+				ImGui::SliderFloat("3D 해상도 배율", &g_sett->virtualResolutionMultiple, 0.1, 10.0, "%.1f"); ImGui::SameLine(); HelpMarker("3D 렌더링 해상도의 배율을 설정합니다.\n1080P 해상도에서 앨리어싱 문제를 크게 줄일 수 있습니다.\n일부 2D 이미지의 배경이 너무 작아질 수 있습니다.\n권장 값: 4k 미만: 2.0; 4K 이상: 1.5. 기본값:1.0.");
+				if (ImGui::Button("Test"))
+					set_antialiasing_hook(8);
+
 				EndGroupPanel();
 
 				BeginGroupPanel("배속");

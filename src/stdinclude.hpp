@@ -102,6 +102,7 @@ extern ID3D11ShaderResourceView* texture_kimura;
 
 #pragma endregion
 
+
 //must be value name = json config member name
 extern struct globalUmaSettings {
     bool dumpStaticEntries = false;
@@ -135,6 +136,8 @@ extern struct globalUmaSettings {
     bool isTapEffectEnabled = true;
     bool isShowLiveFPSGraph = true;
     bool isShowLivePerfInfo = true;
+    float virtualResolutionMultiple = 1.0f;
+    bool enableVSync = false;
 
     bool gotoTitleOnError = true; //N
     bool walkMotionAllUrara = false;
@@ -158,7 +161,7 @@ extern struct localUmaSettings {
     int story3dMobid = -1;
     int story3dHeadID = -1;
     int antialiasing = 8;
-    int graphics_quality = 3;
+    int graphics_quality = 2;
     int vsync_count = 0;
     int cardid = -1;
     float aspect_ratio = 16.f / 9.f;
@@ -198,7 +201,7 @@ extern TimelineKeyCharacterType c_gachaCharaType;
 
 void ResetGame();
 
-char* (*msgPackToJson)(char* MsgPackBuffer, int size);
+extern char* (*msgPackToJson)(char* MsgPackBuffer, int size);
 
 extern struct ScrollingBuffer {
     int MaxSize;
@@ -224,3 +227,33 @@ extern struct ScrollingBuffer {
         }
     }
 };
+
+extern class discordRpc {
+private:
+    HMODULE module = NULL;
+    void (*dispose)();
+
+public:
+    bool (*init)();   
+    void (*set)(char* msgpack, int size, const char* url);
+    void (*setScene)(int sceneId);
+    void (*initDB)(const char* dbPath);
+
+    
+    discordRpc() {
+        module = LoadLibraryA("plugins/Uma.Helper.DiscordRPC.dll");
+        init = (bool (*)())GetProcAddress(module, "init");
+        initDB = (void (*)(const char*))GetProcAddress(module, "initDB");
+        set = (void (*)(char*, int, const char*))GetProcAddress(module, "processRPC");
+        setScene = (void (*)(int))GetProcAddress(module, "setSceneID");
+        dispose = (void (*)())GetProcAddress(module, "disposeRPC");
+
+    }
+
+    ~discordRpc() {
+        dispose();
+        FreeLibrary(module);
+    }
+};
+
+extern discordRpc* rpc;
