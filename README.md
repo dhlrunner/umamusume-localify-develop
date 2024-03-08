@@ -39,7 +39,8 @@ Copy of https://github.com/GEEKiDoS/umamusume-localify
 |useExclusiveFullscreen|-|전체화면 시 단독 모드 사용||
 |resetFullscreen|-|단독 모드 전체화면 해제||
 |cutinCharSet|[0]캐릭터 타입 정수 [1]캐릭터 ID 정수 [2]의상 ID 정수 [3]머리ID 정수|컷인 캐릭터 강제 지정 (스킬 컷씬용)| 캐릭터 관련 값이 -1일 경우 기본값 사용|
-|cutinRaceCharMotionSet|[0]캐릭터 ID 정수 [1]의상 ID 정수 [2]레이스 등급 정수(G1:100,G2:200, G3:300) [3]레이스 등수 정수(0부터 시작)| 값이 -1일 경우 기본값 사용|
+|cutinRaceCharMotionSet|[0]캐릭터 ID 정수 [1]의상 ID 정수 [2]레이스 등급 정수(G1:100,G2:200, G3:300) [3]레이스 등수 정수(0부터 시작)| 레이스 결과 모션 강제 설정 |값이 -1일 경우 기본값 사용|
+|setCardId|[0]캐릭터 cardid 정수|레이스 결과 모션 강제 설정 (G1 레이스 전용)|값이 -1일 경우 기본값 사용|
 |resetCutin|-|컷인 캐릭터 설정값 초기화||
 |story3dCharSetEnable|-|스토리용 3D 모델 설정 기능 활성화||
 |story3dCharSet|[0]캐릭터 ID 정수 [1]의상 ID 정수 [2]모브 ID 정수 [3]머리ID 정수|스토리용 3D 모델 강제설정 기능| story3dCharSetEnable이 켜진 상태에서 값이 -1일 경우 모델 생성시마다 바꿀 캐릭터를 묻습니다.|
