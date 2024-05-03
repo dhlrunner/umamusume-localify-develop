@@ -238,7 +238,7 @@ public:
     void (*set)(char* msgpack, int size, const char* url);
     void (*setScene)(int sceneId);
     void (*initDB)(const char* dbPath);
-
+    void (*showCharSelectForm)();
     
     discordRpc() {
         module = LoadLibraryA("plugins/Uma.Helper.DiscordRPC.dll");
@@ -247,7 +247,7 @@ public:
         set = (void (*)(char*, int, const char*))GetProcAddress(module, "processRPC");
         setScene = (void (*)(int))GetProcAddress(module, "setSceneID");
         dispose = (void (*)())GetProcAddress(module, "disposeRPC");
-
+        showCharSelectForm = (void(*)())GetProcAddress(module, "showCharSelectForm");
     }
 
     ~discordRpc() {

@@ -85,6 +85,8 @@ bool showFinishOrderFlash = true;
 bool isShowingSeekbar = false;
 
 void* (*GameObject_Find)(Il2CppString*);
+void* (*Unity_AssetBundle_LoadInternal)(Il2CppString*, unsigned int, unsigned long);
+Il2CppString* (*unityengine_get_persistentDataPath_addr)();
 
 void SignalHandler(int signal)
 {
@@ -1222,7 +1224,7 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 		headId = 0;
 		printf("%d\n", charaId);*/
 		
-
+		//rpc->showCharSelectForm();
 
 		if (sett->changeStoryChar) 
 		{
@@ -1640,6 +1642,8 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 	void* CutInHelper_OnCreateCharacterModel_hook(void* _this, CutInCharacterCreateInfo* info) {
 		printf("CutInHelper_OnCreateCharacterModel called origType=%d, origcharaid=%d\n",info->_characterType, info->_charaId );
 
+		//rpc->showCharSelectForm();
+
 		if (g_sett->homeAllDiamond) {
 			info->_characterType = (TimelineKeyCharacterType)-1;
 			info->_charaId = 1067;
@@ -1999,7 +2003,7 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 
 		if (strlen(g_sett->customDataPath) > 0) {
 			Il2CppString* custompath = il2cpp_string_new(g_sett->customDataPath);
-			wprintf(L"[unityengine_get_persistentDataPath] originalpersistentpath=%s, replacedpersistentpath=%s\n", ret->start_char, custompath->start_char);
+			//wprintf(L"[unityengine_get_persistentDataPath] originalpersistentpath=%s, replacedpersistentpath=%s\n", ret->start_char, custompath->start_char);
 			return custompath;
 		}
 
@@ -2338,7 +2342,8 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 	void* load_scene_internal_orig = nullptr;
 	void* load_scene_internal_hook(Il2CppString* sceneName, int sceneBuildIndex, void* parameters, bool mustCompleteNextFrame)
 	{
-		wprintf(L"%s\n", sceneName->start_char);
+		
+		//wprintf(L"%s\n", sceneName->start_char);
 		return reinterpret_cast<decltype(load_scene_internal_hook)*>(load_scene_internal_orig)(sceneName, sceneBuildIndex, parameters, mustCompleteNextFrame);
 	}
 
@@ -2789,7 +2794,12 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 			//landscape();
 		}
 
+
 		rpc->setScene(sceneId);
+
+		if (!g_sett->isTapEffectEnabled) {
+			GameObject_SetActive("Gallop.GameSystem/SystemManagerRoot/SystemSingleton/UIManager/SystemCanvas/TapEffectCanvas", false);
+		}
 		return reinterpret_cast<decltype(Gallop_SceneManager_LoadScene_hook)*>(Gallop_SceneManager_LoadScene_orig)(_this, sceneId);
 	}
 	
@@ -3041,6 +3051,52 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 
 		//wprintf(L"_PlaySong CueName=%s\n", get_CueName(info)->start_char);
 		return reinterpret_cast<decltype(AudioManager__PlaySong_hook)*>(AudioManager__PlaySong_orig)(_this, index, info, param, pauseImmediate, stopType);
+	}
+
+	void* Cyan_Loader_AssetLoader_LoadOne_orig;
+	bool Cyan_Loader_AssetLoader_LoadOne_hook(Il2CppObject* _this, void* handle, AssetRequest* request) {
+		//printf("LoadOne Hook\n");
+		
+		//Il2CppString* ()();
+		//
+		// wchar_t* basePath = unityengine_get_persistentDataPath_hook()->start_char;
+		//wprintf(L"Base=%s\n", unityengine_get_persistentDataPath_addr()->start_char);
+		//wprintf(L"Path=%s\n", request->path->start_char);
+		wstring modFullPath(wstring(unityengine_get_persistentDataPath_hook()->start_char) + L"/dat_mod/" + wstring(request->path->start_char));
+
+		//wprintf(L"Modded full path=%s\n", modFullPath.c_str());
+		if (std::filesystem::exists(modFullPath)) {
+			wprintf(L"Loaded modded asset : %s\n", modFullPath.c_str());
+
+			auto setAssetBundle = reinterpret_cast<void (*)(
+				void* _this, void* assetBundle)>(il2cpp_symbols::get_method_pointer(
+					"_Cyan.dll", "Cyan.Loader", "AssetHandle", "SetAssetBundle",
+					1));
+
+			auto get_IsLoaded = reinterpret_cast<bool(*)(
+				void* _this)>(il2cpp_symbols::get_method_pointer(
+					"_Cyan.dll", "Cyan.Loader", "AssetHandle", "get_IsLoaded",
+					0));
+
+			void* asset = Unity_AssetBundle_LoadInternal(il2cpp_string_new_utf16(modFullPath.c_str(), modFullPath.length()), 0, 0);
+
+			printf("New assetBundle ptr=0x%p\n", asset);
+			setAssetBundle(handle, asset);
+			return get_IsLoaded(handle);
+
+		}
+		
+		//wprintf(L"hash=%s\n", request->hname->start_char);
+		//wprintf(L"path=%s\n", request->path->start_char);
+
+		return reinterpret_cast<decltype(Cyan_Loader_AssetLoader_LoadOne_hook)*>(Cyan_Loader_AssetLoader_LoadOne_orig)(_this, handle, request);
+	}
+
+	void* Unity_AssetBundle_LoadInternal_orig;
+	void* Unity_AssetBundle_LoadInternal_hook(Il2CppString* path, unsigned int crc, unsigned long offset) {
+		//printf("Unity_AssetBundle_LoadInternal Hook\n");
+		//wprintf(L"pth=%s, crc=%d, offset=%d\n", path->start_char, crc, offset);
+		return reinterpret_cast<decltype(Unity_AssetBundle_LoadInternal_hook)*>(Unity_AssetBundle_LoadInternal_orig)(path, crc, offset);
 	}
 
 	//void* GraphicSettings_Setup_orig = nullptr;
@@ -3898,11 +3954,11 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 				);
 
 		
-		auto unityengine_get_persistentDataPath_addr = reinterpret_cast<Il2CppString*(*)()>(
+		/*auto unityengine_get_persistentDataPath_addr = reinterpret_cast<Il2CppString*(*)()>(
 			il2cpp_symbols::get_method_pointer(
 				"UnityEngine.CoreModule.dll", "UnityEngine",
 				"Application", "get_persistentDataPath", 0
-			));
+			));*/
 
 		LoadScene = reinterpret_cast<void(*)(Il2CppString*, LoadSceneParameters*)>(
 			il2cpp_symbols::get_method_pointer(
@@ -4193,6 +4249,27 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 			LibNative_Sqlite3_Connection_CloseDB_hook, &LibNative_Sqlite3_Connection_CloseDB_orig);
 		MH_EnableHook((LPVOID)LibNative_Sqlite3_Connection_CloseDB_addr);
 
+		/*auto Cyan_LocalFile_PathResolver_GetLocalPath = reinterpret_cast<Il2CppString* (*)(Il2CppObject,int,Il2CppString*)>(il2cpp_symbols::get_method_pointer(
+			"_Cyan.dll", "Cyan.LocalFile",
+			"ResourcePath", "GetRaceResultCuttPath", 6
+		));*/
+
+		auto Cyan_Loader_AssetLoader_LoadOne_addr = reinterpret_cast<bool(*)(void*, AssetRequest*)>(il2cpp_symbols::get_method_pointer(
+			"_Cyan.dll", "Cyan.Loader",
+			"AssetLoader", "LoadOne", 2
+		));
+		MH_CreateHook((LPVOID)Cyan_Loader_AssetLoader_LoadOne_addr,
+			Cyan_Loader_AssetLoader_LoadOne_hook, &Cyan_Loader_AssetLoader_LoadOne_orig);
+		MH_EnableHook((LPVOID)Cyan_Loader_AssetLoader_LoadOne_addr);
+
+		Unity_AssetBundle_LoadInternal = reinterpret_cast<void* (*)(Il2CppString*, unsigned int, unsigned long)>(
+			il2cpp_resolve_icall("UnityEngine.AssetBundle::LoadFromFile_Internal(System.Stri ng,System.UInt32,System.UInt64)")
+		);
+
+		MH_CreateHook((LPVOID)Unity_AssetBundle_LoadInternal,
+			Unity_AssetBundle_LoadInternal_hook, &Unity_AssetBundle_LoadInternal_orig);
+		MH_EnableHook((LPVOID)Unity_AssetBundle_LoadInternal);
+
 	/*	auto AudioManager__PlaySong_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll", "Gallop",
 			"AudioManager", "_PlaySong", 5
@@ -4417,7 +4494,7 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 		ADD_HOOK(textutil_getmastertext, "textutil_getmastertext at %p\n");
 		ADD_HOOK(textutil_getstatictext, "textutil_getstatictext at %p\n");
 		ADD_HOOK(apply_graphics_quality, "Gallop.GraphicSettings.ApplyGraphicsQuality at %p\n");
-		ADD_HOOK(unityengine_get_persistentDataPath, "unityengine_get_persistentDataPath at %p\n");
+		//ADD_HOOK(unityengine_get_persistentDataPath, "unityengine_get_persistentDataPath at %p\n");
 		ADD_HOOK(MasterEventMotionData_GetAnimCommand, "MasterEventMotionData_GetAnimCommand at %p\n");
 		ADD_HOOK(ModelController_GetCardId, "ModelController_GetCardId at %p\n");
 
@@ -4520,7 +4597,7 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 			il2cpp_symbols::init(il2cpp_module);
 
 
-			auto unityengine_get_persistentDataPath_addr = il2cpp_resolve_icall("UnityEngine.Application::get_persistentDataPath()");/*reinterpret_cast<Il2CppString * (*)()>(
+			unityengine_get_persistentDataPath_addr = reinterpret_cast<Il2CppString* (*)()>(il2cpp_resolve_icall("UnityEngine.Application::get_persistentDataPath()"));/*reinterpret_cast<Il2CppString * (*)()>(
 				il2cpp_symbols::get_method_pointer(
 					"UnityEngine.CoreModule.dll", "UnityEngine",
 					"Application", "get_persistentDataPath", 0
@@ -5691,7 +5768,11 @@ int imguiwindow()
 
 				
 			}
-			
+			if (ImGui::CollapsingHeader("캐릭터", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::Checkbox("스토리용 3D 모델 강제 변경 활성화", &sett->changeStoryChar);
+
+			}
+
 			if (ImGui::CollapsingHeader("레이스", ImGuiTreeNodeFlags_DefaultOpen)) {
 				ImGui::SliderFloat("등수 표시기 출력 위치", &g_sett->rankUIShowMeter,0.0,3000.0,"%.2f M"); ImGui::SameLine(); HelpMarker("레이스 시작 후 등수 표시기를 출력할 위치를 정합니다.\n(LCtrl+슬라이더 클릭으로 직접 입력 가능)");
 				ImGui::SliderFloat("등수 표시기 숨김 위치", &g_sett->rankUIHideoffset,0.0,9999.0,"%.2f"); ImGui::SameLine(); HelpMarker("등수 표시기를 숨길 타이밍을 지정합니다.\n(LCtrl+슬라이더 클릭으로 직접 입력 가능)");

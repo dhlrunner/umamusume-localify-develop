@@ -1189,6 +1189,16 @@ struct RequestCueInfo {
 	int CueId;
 };
 
+//Cyan.Loader.AssetLoader+AssetRequest
+struct AssetRequest {
+	char dummy[0xF];
+	unsigned char kind;
+	unsigned char state;
+	char dummy1[0x7];
+	Il2CppString* hname;
+	Il2CppString* path;
+};
+
 // function types
 typedef Il2CppString* (*il2cpp_string_new_utf16_t)(const wchar_t* str, unsigned int len);
 typedef Il2CppString* (*il2cpp_string_new_t)(const char* str);
