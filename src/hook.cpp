@@ -665,14 +665,42 @@ bool SaveFrameBufferToFile(ID3D11Device* pDevice, const std::string& filePath)
 		return true;
 	}
 
+void* il2cpp_init_orig = nullptr;
+bool __stdcall il2cpp_init_hook(const char* domain_name)
+{
+	const auto result = reinterpret_cast<decltype(il2cpp_init_hook)*>(il2cpp_init_orig)(domain_name);
+
+	il2cpp_symbols::init(GetModuleHandle(L"GameAssembly.dll"));
+
+	hook_beforeboot();
+
+	return result;
+}
+
+
 int (*ObscuredInt_Decrypted)(ObscuredInt*) = nullptr;
 void* load_library_w_orig = nullptr;
 HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 	{
 		wprintf(L"loaded %s\n", path);
+
+		if (path == L"GameAssembly.dll"s) {
+			const auto il2cpp = reinterpret_cast<decltype(LoadLibraryW)*>(load_library_w_orig)(path);
+			const auto il2cpp_init_addr = GetProcAddress(il2cpp, "il2cpp_init");
+
+			MH_CreateHook(il2cpp_init_addr, il2cpp_init_hook, &il2cpp_init_orig);
+			auto result = MH_EnableHook(il2cpp_init_addr);
+
+			if (result != MH_OK) {
+				printf("il2cpp init failed");
+			}
+
+			return il2cpp;
+		}
+
 		// GameAssembly.dll code must be loaded and decrypted while loading criware library
-		if (path == L"advapi32"s) {
-			hook_beforeboot();
+		else if (path == L"advapi32"s) {
+			//hook_beforeboot();
 			//imguiwindow();
 		}
 		else if (path == L"cri_ware_unity.dll"s)
@@ -771,6 +799,8 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 		return reinterpret_cast<decltype(LoadLibraryW)*>(load_library_w_orig)(path);
 	}
 
+	
+
 	void* populate_with_errors_orig = nullptr;
 	bool populate_with_errors_hook(void* _this, Il2CppString* str, TextGenerationSettings_t* settings, void* context)
 	{
@@ -825,8 +855,9 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 
 			rpc->initDB(string(path.begin(), path.end()).c_str());
 
-			
 
+			
+			//SQLite::
 
 			//if (std::filesystem::exists("firstrun.sql")) {
 			//	wstring sqlQuery = readFileIntoString("firstrun.sql");
@@ -3099,6 +3130,70 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 		return reinterpret_cast<decltype(Unity_AssetBundle_LoadInternal_hook)*>(Unity_AssetBundle_LoadInternal_orig)(path, crc, offset);
 	}
 
+	void* Application_Quit_orig;
+	void Application_Quit_hook(int code) {
+		printf("Application.Quit() hooked Code->%d\n",code);
+		//system("pause");
+		//printf("App will quit after 5 seconds\n");
+		//Sleep(5000);
+		return;
+		reinterpret_cast<decltype(Application_Quit_hook)*>(Application_Quit_orig)(code);
+	}
+
+	void* GameSystem_ApplicationQuit_orig;
+	void GameSystem_ApplicationQuit_hook() {
+		printf("GameSystem.ApplicationQuit() hooked\n");
+		//return;
+	}
+
+	void* IsIllegalUser_orig;
+	bool IsIllegalUser_hook() {
+		printf("IsIllegalUser hooked\n");
+		return false;
+	}
+
+	/*void* ExitProcess_orig;
+	UINT ExitProcess_hook(HANDLE hProcess, NTSTATUS exitStatus) {
+		printf("ExitProcess hooked\n");
+		return 0;
+	}*/
+
+	void* UpdateDispatcher_Initialize_orig;
+	void UpdateDispatcher_Initialize_hook() {
+		printf("UpdateDispacher hook\n");
+
+		
+
+		auto klass = il2cpp_symbols::get_class("Cute.Core.Assembly.dll", "Cute.Core", "UpdateDispatcher");
+		printf("ClassPTR=%p\n", klass);
+		auto isQuitField = il2cpp_class_get_field_from_name((Il2CppClass*)klass, "isQuit");
+		
+		bool isQuit;
+		il2cpp_field_get_value((Il2CppObject*)klass, isQuitField, &isQuit);
+		printf("Field=%s,Value=%d\n", isQuitField->name, isQuit);
+		isQuit = false;
+		il2cpp_field_set_value((Il2CppObject*)klass , isQuitField, &isQuit);
+
+		reinterpret_cast<decltype(UpdateDispatcher_Initialize_hook)*>(UpdateDispatcher_Initialize_orig)();
+	}
+
+	void* FindFirstFileExW_orig;
+	HANDLE FindFirstFileExW_hook(
+		LPCWSTR            lpFileName,
+		FINDEX_INFO_LEVELS fInfoLevelId,
+		LPVOID             lpFindFileData,
+		FINDEX_SEARCH_OPS  fSearchOp,
+		LPVOID             lpSearchFilter,
+		DWORD              dwAdditionalFlags
+	) 
+	{
+
+		wprintf(L"FindFirstFileExW hook -> %s\n", lpFileName);
+
+		return reinterpret_cast<decltype(FindFirstFileExW_hook)*>(FindFirstFileExW_orig)(lpFileName, fInfoLevelId, lpFindFileData,
+			fSearchOp, lpSearchFilter, dwAdditionalFlags);
+	}
+
 	//void* GraphicSettings_Setup_orig = nullptr;
 	//void GraphicSettings_Setup_hook(Il2CppObject* _instance) {
 	//	printf("!!!!!!!!!!!!!!!!!!!!!!!!![GraphicSettings_Setup] called!!!!!!!!!!!!\n");
@@ -4263,7 +4358,7 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 		MH_EnableHook((LPVOID)Cyan_Loader_AssetLoader_LoadOne_addr);
 
 		Unity_AssetBundle_LoadInternal = reinterpret_cast<void* (*)(Il2CppString*, unsigned int, unsigned long)>(
-			il2cpp_resolve_icall("UnityEngine.AssetBundle::LoadFromFile_Internal(System.Stri ng,System.UInt32,System.UInt64)")
+			il2cpp_resolve_icall("UnityEngine.AssetBundle::LoadFromFile_Internal(System.String,System.UInt32,System.UInt64)")
 		);
 
 		MH_CreateHook((LPVOID)Unity_AssetBundle_LoadInternal,
@@ -4332,6 +4427,11 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 		MH_CreateHook((LPVOID)RaceUIFinishOrderFlash_Play_addr,
 			RaceUIFinishOrderFlash_Play_hook, &RaceUIFinishOrderFlash_Play_orig);
 		MH_EnableHook((LPVOID)RaceUIFinishOrderFlash_Play_addr);
+
+		/*auto Application_Quit_addr = reinterpret_cast<void(*)(int)>(il2cpp_resolve_icall("UnityEngine.Application::Quit(System.Int32)"));
+		MH_CreateHook((LPVOID)Application_Quit_addr,
+			Application_Quit_hook, &Application_Quit_orig);
+		MH_EnableHook((LPVOID)Application_Quit_addr);*/
 
 		/*auto LiveModelController_UpdateEyeReflectionController_addr = il2cpp_symbols::get_method_pointer(
 			"umamusume.dll",
@@ -4584,18 +4684,72 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 		if (g_sett->dumpStaticEntries)
 			dump_all_entries();
 
+		GetGraphicsDeviceName = reinterpret_cast<Il2CppString * (*)()>(il2cpp_symbols::get_method_pointer(
+			"UnityEngine.CoreModule.dll", "UnityEngine", "SystemInfo", "GetGraphicsDeviceName", 0
+		));
+
+		wprintf(L"GPUName = %s\n", GetGraphicsDeviceName()->start_char);
+
+		char* conv_str = new char[GetGraphicsDeviceName()->length + 2];
+		memset(conv_str, 0, GetGraphicsDeviceName()->length + 2);
+
+		wcstombs(conv_str, GetGraphicsDeviceName()->start_char, GetGraphicsDeviceName()->length + 1);
+
+		GPUName = (const char*)conv_str;
 		
 	}
 
 	void hook_beforeboot() {
+		//MessageBox(0, L"hookbefore", L"t", MB_OK);
 		if (!beforePatched) {
 			printf("Patch before game boot...\n");
 
+			/*auto kernel32_module = GetModuleHandle(L"ntdll.dll");
+
+			auto ExitProcess_addr = GetProcAddress(kernel32_module, "NtTerminateProcess");
+			MH_CreateHook((LPVOID)ExitProcess_addr, ExitProcess_hook, &ExitProcess_orig);
+			MH_EnableHook((LPVOID)ExitProcess_addr);*/
+
+			//printf("ExitProcess PTR=%p\n", ExitProcess_addr);
+			//while (true) {};
+
+			MH_CreateHook(FindFirstFileExW, FindFirstFileExW_hook, &FindFirstFileExW_orig);
+			MH_EnableHook(FindFirstFileExW);
+
 			auto il2cpp_module = GetModuleHandle(L"GameAssembly.dll");
+
+			pedump(il2cpp_module, "dumped_GameAssembly.dll");
 
 			// load il2cpp exported functions
 			il2cpp_symbols::init(il2cpp_module);
 
+			auto Application_Quit_addr = il2cpp_resolve_icall("UnityEngine.Application::Quit(System.Int32)");
+			//printf("PTR=%p\n", Application_Quit_addr);
+			
+			MH_CreateHook((LPVOID)Application_Quit_addr, Application_Quit_hook, &Application_Quit_orig);
+			MH_EnableHook((LPVOID)Application_Quit_addr);
+
+			auto IsIllegalUser_addr = reinterpret_cast<bool(*)()>(il2cpp_symbols::get_method_pointer(
+				"Cute.Core.Assembly.dll", "Cute.Core",
+				"Device", "IsIllegalUser", 0
+			));
+			//printf("PTR=%p\n", Application_Quit_addr);
+
+			MH_CreateHook((LPVOID)IsIllegalUser_addr, IsIllegalUser_hook, &IsIllegalUser_orig);
+			MH_EnableHook((LPVOID)IsIllegalUser_addr);
+			
+			auto UpdateDispatcher_Initialize_addr = il2cpp_symbols::get_method_pointer("Cute.Core.Assembly.dll", "Cute.Core", "UpdateDispatcher", "Initialize", -1);
+			MH_CreateHook((LPVOID)UpdateDispatcher_Initialize_addr, UpdateDispatcher_Initialize_hook, &UpdateDispatcher_Initialize_orig);
+			MH_EnableHook((LPVOID)UpdateDispatcher_Initialize_addr);
+
+			//auto GameSystem_ApplicationQuit_addr = il2cpp_symbols::get_method_pointer(
+			//	"umamusume.dll", "Gallop",
+			//	"GameSystem", "ApplicationQuit", 0
+			//);
+			////printf("PTR=%p\n", Application_Quit_addr);
+
+			//MH_CreateHook((LPVOID)GameSystem_ApplicationQuit_addr, GameSystem_ApplicationQuit_hook, &GameSystem_ApplicationQuit_orig);
+			//MH_EnableHook((LPVOID)GameSystem_ApplicationQuit_addr);
 
 			unityengine_get_persistentDataPath_addr = reinterpret_cast<Il2CppString* (*)()>(il2cpp_resolve_icall("UnityEngine.Application::get_persistentDataPath()"));/*reinterpret_cast<Il2CppString * (*)()>(
 				il2cpp_symbols::get_method_pointer(
@@ -4645,19 +4799,9 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 
 			/*MH_CreateHook((LPVOID)cyan_localfile_pathresolver_getlocalpath_addr, unityengine_get_persistentDataPath_hook, &cyan_localfile_pathresolver_getlocalpath_orig);
 			MH_EnableHook((LPVOID)cyan_localfile_pathresolver_getlocalpath_addr);*/
-			GetGraphicsDeviceName = reinterpret_cast<Il2CppString * (*)()>(il2cpp_symbols::get_method_pointer(
-				"UnityEngine.CoreModule.dll", "UnityEngine", "SystemInfo", "GetGraphicsDeviceName", 0
-			));
-
-			wprintf(L"GPUName = %s\n", GetGraphicsDeviceName()->start_char);
-
-			char* conv_str = new char[GetGraphicsDeviceName()->length + 2];
-			memset(conv_str, 0, GetGraphicsDeviceName()->length + 2);
 			
-			wcstombs(conv_str, GetGraphicsDeviceName()->start_char, GetGraphicsDeviceName()->length + 1);
 
-			GPUName = (const char*)conv_str;
-
+			
 			beforePatched = true;
 		}
 		
@@ -4937,8 +5081,63 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 	}
 
 
+
+void* GetModuleHandleW_orig = nullptr;
+HMODULE GetModuleHandleW_hook(LPCWSTR m_name) {
+	//MessageBox(0, L"GetModuleHandleW ", L"Title", MB_OK);
+	//wprintf(L"GetModuleHandleW hooked. Modulename=%s\n", m_name);
+	if ((m_name != nullptr) &&
+		(m_name == L"version.dll"s)) {
+		return nullptr;
+	}
+	return reinterpret_cast<decltype(GetModuleHandleW)*>(GetModuleHandleW_orig)(m_name);
+}
+
+void* WinVerifyTrust_orig = nullptr;
+LPVOID WinVerifyTrust_addr = nullptr;
+LONG WinVerifyTrust_hook(
+	HWND   hwnd,
+	GUID* pgActionID,
+	LPVOID pWVTData) {
+	//MessageBox(0, L"WinVerifyTrust_hook", L"Title", MB_OK);
+
+	WINTRUST_DATA* vtdata = (WINTRUST_DATA*)pWVTData;
+
+	//MessageBox(0, vtdata->pFile->pcwszFilePath, L"WinVerifyTrust", MB_OK);
+	std::wstring path = vtdata->pFile->pcwszFilePath;
+
+	if (path.contains(L"VERSION.dll")) {
+		
+		return 0;
+	}
+
+	return reinterpret_cast<decltype(WinVerifyTrust)*>(WinVerifyTrust_orig)(hwnd, pgActionID, pWVTData);
+}
+	
+void init_hook_early() {
+	if (MH_Initialize() != MH_OK) {
+		MessageBox(0, L"MH_Initialize() failed!", L"Error", MB_OK);
+		ExitProcess(1);
+	}
+		//return false;
+
+	mh_inited = true;
+
 	
 
+	MH_CreateHook((LPVOID)GetModuleHandleW, GetModuleHandleW_hook, &GetModuleHandleW_orig);
+	MH_EnableHook((LPVOID)GetModuleHandleW);
+
+	MH_CreateHook(LoadLibraryW, load_library_w_hook, &load_library_w_orig);
+	MH_EnableHook(LoadLibraryW);
+
+	HMODULE wintrust = LoadLibraryW(L"wintrust.dll");
+
+	WinVerifyTrust_addr = GetProcAddress(wintrust, "WinVerifyTrust");
+
+	MH_CreateHook((LPVOID)WinVerifyTrust_addr, WinVerifyTrust_hook, &WinVerifyTrust_orig);
+	MH_EnableHook((LPVOID)WinVerifyTrust_addr);
+}
 
 
  
@@ -4967,14 +5166,12 @@ bool init_hook()
 	if (mh_inited)
 		return false;
 
-	if (MH_Initialize() != MH_OK)
-		return false;
+	
 
-	mh_inited = true;
+	//MH_CreateHook(LoadLibraryW, load_library_w_hook, &load_library_w_orig);
+	//MH_EnableHook(LoadLibraryW);
 
-	MH_CreateHook(LoadLibraryW, load_library_w_hook, &load_library_w_orig);
-	MH_EnableHook(LoadLibraryW);
-
+	
 
 	return true;
 }
@@ -5914,6 +6111,9 @@ int imguiwindow()
 
 			
 			ImGui::Separator();
+
+			ImGui::Checkbox("콘솔 커멘드 입력 활성화", &sett->isCanInputCommands);
+
 			if (ImGui::Button("타이틀로 돌아가기 (게임 리셋)")) {
 				ResetGame();
 			} ImGui::SameLine(); HelpMarker("단축키: LCtrl+R");

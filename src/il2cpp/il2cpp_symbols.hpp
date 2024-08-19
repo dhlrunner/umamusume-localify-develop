@@ -1227,6 +1227,7 @@ typedef const Il2CppType* (*il2cpp_field_get_type_t)(FieldInfo* field);
 typedef void* (*il2cpp_class_get_nested_types_t)(void* klass, void** iter);
 typedef Il2CppObject* (*il2cpp_type_get_object_t)(const Il2CppType* type);
 typedef FieldInfo* (*il2cpp_class_get_fields_t)(Il2CppClass* klass, void** iter);
+typedef void (*il2cpp_runtime_object_init_t)(Il2CppObject* obj);
 
 typedef void* (*il2cpp_image_get_class_t)(void* image, size_t index);
 
@@ -1261,6 +1262,8 @@ extern il2cpp_class_get_fields_t il2cpp_class_get_fields;
 extern il2cpp_class_get_nested_types_t il2cpp_class_get_nested_types;
 
 extern il2cpp_image_get_class_t il2cpp_image_get_class;
+
+extern il2cpp_runtime_object_init_t il2cpp_runtime_object_init;
 
 char* il2cpp_array_addr_with_size(void* arr, int32_t size, uintptr_t idx);
 

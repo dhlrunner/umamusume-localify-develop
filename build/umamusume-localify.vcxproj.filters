@@ -28,6 +28,9 @@
     <Filter Include="implot">
       <UniqueIdentifier>{90fd8c6f-1264-49c5-b67b-e53cbd18e0cb}</UniqueIdentifier>
     </Filter>
+    <Filter Include="SQLiteCpp">
+      <UniqueIdentifier>{ca98da5d-8570-4b5b-a944-1dd96f4ece89}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\il2cpp\il2cpp_symbols.hpp">
@@ -100,6 +103,42 @@
     </ClInclude>
     <ClInclude Include="..\src\implot\implot_internal.h">
       <Filter>implot</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SQLiteCpp\Assertion.h">
+      <Filter>SQLiteCpp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SQLiteCpp\Backup.h">
+      <Filter>SQLiteCpp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SQLiteCpp\Column.h">
+      <Filter>SQLiteCpp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SQLiteCpp\Database.h">
+      <Filter>SQLiteCpp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SQLiteCpp\Exception.h">
+      <Filter>SQLiteCpp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SQLiteCpp\ExecuteMany.h">
+      <Filter>SQLiteCpp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SQLiteCpp\Savepoint.h">
+      <Filter>SQLiteCpp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SQLiteCpp\SQLiteCpp.h">
+      <Filter>SQLiteCpp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SQLiteCpp\Statement.h">
+      <Filter>SQLiteCpp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SQLiteCpp\Transaction.h">
+      <Filter>SQLiteCpp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SQLiteCpp\Utils.h">
+      <Filter>SQLiteCpp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SQLiteCpp\VariadicBind.h">
+      <Filter>SQLiteCpp</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

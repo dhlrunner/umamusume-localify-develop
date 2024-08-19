@@ -29,6 +29,7 @@ il2cpp_field_get_type_t il2cpp_field_get_type;
 il2cpp_type_get_object_t il2cpp_type_get_object;
 il2cpp_class_get_fields_t il2cpp_class_get_fields;
 il2cpp_class_get_nested_types_t il2cpp_class_get_nested_types;
+il2cpp_runtime_object_init_t il2cpp_runtime_object_init;
 
 il2cpp_image_get_class_t il2cpp_image_get_class;
 
@@ -69,6 +70,7 @@ namespace il2cpp_symbols
 		RESOLVE_IMPORT(il2cpp_type_get_object);
 		RESOLVE_IMPORT(il2cpp_class_get_fields);
 		RESOLVE_IMPORT(il2cpp_class_get_nested_types);
+		RESOLVE_IMPORT(il2cpp_runtime_object_init);
 
 		il2cpp_domain = il2cpp_domain_get();
 	}

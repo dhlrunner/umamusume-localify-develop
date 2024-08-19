@@ -36,7 +36,10 @@ namespace
 
 			dll_path += "\\" + "version.dll"s;
 
-			auto original_dll = LoadLibraryA(dll_path.data());
+			CopyFile(wstring(dll_path.begin(), dll_path.end()).c_str(), L"_version.dll", FALSE);
+
+			auto original_dll = LoadLibraryW(L"_version.dll");
+			//auto original_dll = LoadLibraryA(dll_path.data());
 
 			GetFileVersionInfoA_Original = GetProcAddress(original_dll, "GetFileVersionInfoA");
 			GetFileVersionInfoByHandle_Original = GetProcAddress(original_dll, "GetFileVersionInfoByHandle");

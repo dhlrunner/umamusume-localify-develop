@@ -1854,6 +1854,11 @@ int __stdcall DllMain(HINSTANCE, DWORD reason, LPVOID)
 {
 	if (reason == DLL_PROCESS_ATTACH)
 	{
+		//create_debug_console();
+		//wprintf(L"Waiting for debugger to attach...");
+		//while (!::IsDebuggerPresent())
+		//	::Sleep(100);
+
 		// the DMM Launcher set start path to system32 wtf????
 		/*std::string module_name;
 		module_name.resize(MAX_PATH);
@@ -1869,13 +1874,23 @@ int __stdcall DllMain(HINSTANCE, DWORD reason, LPVOID)
 		if (module_path.filename() != "umamusume.exe")
 			return 1;
 
+		//MessageBox(0, module_path.filename().c_str(), L"Title", MB_OK);
+
+		
+		//MH_CreateHook((LPVOID)abort, abort_hook, &abort_orig);
+		//MH_EnableHook((LPVOID)abort);
+
+		//pedump(GetModuleHandleA("umamusume.exe"), "dumped_umamusume.exe");*/
+
+		init_hook_early();
 
 		std::filesystem::current_path(
 			module_path.parent_path()
-		);
+		);		
 
 		dicts = read_config();
 
+		//MessageBox(0, L"Thread_init ", L"Title", MB_OK);
 		std::thread init_thread([&]() {
 			if (g_sett->enableConsole)
 				create_debug_console();
@@ -1904,20 +1919,29 @@ int __stdcall DllMain(HINSTANCE, DWORD reason, LPVOID)
 		init_thread.detach();
 
 		HMODULE hMod = GetCurrentModule();
+		
 		DisableThreadLibraryCalls(hMod);
 		CreateThread(nullptr, 0, (LPTHREAD_START_ROUTINE)MainThread, hMod, 0, nullptr);
 
+		//MessageBox(0, L"End", L"Title", MB_OK);
 		//Load my plugins
 		
 
 	}
 	else if (reason == DLL_PROCESS_DETACH)
 	{
-		
+		//create_debug_console();
+		/*DWORD e = 12;
+		GetExitCodeProcess(GetCurrentModule(), &e);
+		TCHAR c[256];
+		wsprintf(c, L"Exiting code: %d", e);
+		MessageBox(0, c, L"Title", MB_OK);*/
 		uninit_hook();
 		logger::close_logger();
 		kiero::shutdown();
 		
+		//while (true) {};
+
 		//IDK why this not working
 		//saveSettingsToJSON();
 	}

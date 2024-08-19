@@ -4,11 +4,14 @@
 
 #include "stb_image.h"
 
+
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 #include <Windows.h>
 #include <signal.h>
 #include <time.h>
+#include <wintrust.h>
+
 
 #include <shlobj.h>
 
@@ -24,6 +27,8 @@
 #include <vector>
 #include <unordered_map>
 #include <chrono>
+
+
 
 #include <MinHook.h>
 
@@ -68,12 +73,13 @@
 
 #include "kiero/kiero.h"
 
-
+#include "SQLiteCpp/SQLiteCpp.h"
 
 
 #pragma GCC diagnostic ignored "-Wdiv-by-zero"
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib,"ws2_32.lib") //Winsock Library
+//#pragma comment (lib, "wintrust")
 #pragma execution_character_set( "utf-8" )
 
 
@@ -169,6 +175,7 @@ extern struct localUmaSettings {
     bool isLiveTimeManual = false;
     bool isShowLivePerfInfo = true;
     bool isShowLiveFPSGraph = false;
+    bool isCanInputCommands = true;
 };
 
 extern globalUmaSettings* g_sett;
@@ -195,7 +202,7 @@ extern int patchCount;
 
 
 
-
+void init_hook_early();
 
 extern TimelineKeyCharacterType c_gachaCharaType;
 
