@@ -31,6 +31,31 @@ il2cpp_class_get_fields_t il2cpp_class_get_fields;
 il2cpp_class_get_nested_types_t il2cpp_class_get_nested_types;
 il2cpp_runtime_object_init_t il2cpp_runtime_object_init;
 
+il2cpp_image_get_name_t il2cpp_image_get_name;
+il2cpp_image_get_class_count_t il2cpp_image_get_class_count;
+il2cpp_type_is_byref_t il2cpp_type_is_byref;
+il2cpp_method_get_flags_t il2cpp_method_get_flags;
+il2cpp_method_get_return_type_t il2cpp_method_get_return_type;
+il2cpp_class_from_type_t il2cpp_class_from_type;
+il2cpp_class_get_name_t il2cpp_class_get_name;
+il2cpp_class_get_properties_t il2cpp_class_get_properties;
+il2cpp_class_is_enum_t il2cpp_class_is_enum;
+il2cpp_method_get_name_t il2cpp_method_get_name;
+il2cpp_method_get_param_count_t il2cpp_method_get_param_count;
+il2cpp_method_get_param_name_t il2cpp_method_get_param_name;
+il2cpp_class_get_parent_t il2cpp_class_get_parent;
+il2cpp_class_get_interfaces_t il2cpp_class_get_interfaces;
+il2cpp_class_get_namespace_t il2cpp_class_get_namespace;
+il2cpp_class_get_flags_t il2cpp_class_get_flags;
+il2cpp_class_is_valuetype_t il2cpp_class_is_valuetype;
+il2cpp_property_get_flags_t il2cpp_property_get_flags;
+il2cpp_property_get_name_t il2cpp_property_get_name;
+il2cpp_property_get_parent_t il2cpp_property_get_parent;
+il2cpp_field_get_flags_t il2cpp_field_get_flags;
+il2cpp_field_get_name_t il2cpp_field_get_name;
+il2cpp_field_get_parent_t il2cpp_field_get_parent;
+il2cpp_field_get_offset_t il2cpp_field_get_offset;
+il2cpp_domain_get_assemblies_t il2cpp_domain_get_assemblies;
 il2cpp_image_get_class_t il2cpp_image_get_class;
 
 char* il2cpp_array_addr_with_size(void* array, int32_t size, uintptr_t idx)
@@ -71,6 +96,31 @@ namespace il2cpp_symbols
 		RESOLVE_IMPORT(il2cpp_class_get_fields);
 		RESOLVE_IMPORT(il2cpp_class_get_nested_types);
 		RESOLVE_IMPORT(il2cpp_runtime_object_init);
+		RESOLVE_IMPORT(il2cpp_image_get_name);
+		RESOLVE_IMPORT(il2cpp_image_get_class_count);
+		RESOLVE_IMPORT(il2cpp_type_is_byref);
+		RESOLVE_IMPORT(il2cpp_method_get_flags);
+		RESOLVE_IMPORT(il2cpp_method_get_return_type);
+		RESOLVE_IMPORT(il2cpp_class_from_type);
+		RESOLVE_IMPORT(il2cpp_class_get_name);
+		RESOLVE_IMPORT(il2cpp_class_get_properties);
+		RESOLVE_IMPORT(il2cpp_class_is_enum);
+		RESOLVE_IMPORT(il2cpp_method_get_name);
+		RESOLVE_IMPORT(il2cpp_method_get_param_count);
+		RESOLVE_IMPORT(il2cpp_method_get_param_name);
+		RESOLVE_IMPORT(il2cpp_class_get_parent);
+		RESOLVE_IMPORT(il2cpp_class_get_interfaces);
+		RESOLVE_IMPORT(il2cpp_class_get_namespace);
+		RESOLVE_IMPORT(il2cpp_class_get_flags);
+		RESOLVE_IMPORT(il2cpp_class_is_valuetype);
+		RESOLVE_IMPORT(il2cpp_property_get_flags);
+		RESOLVE_IMPORT(il2cpp_property_get_name);
+		RESOLVE_IMPORT(il2cpp_property_get_parent);
+		RESOLVE_IMPORT(il2cpp_field_get_flags);
+		RESOLVE_IMPORT(il2cpp_field_get_name);
+		RESOLVE_IMPORT(il2cpp_field_get_parent);
+		RESOLVE_IMPORT(il2cpp_field_get_offset);
+		RESOLVE_IMPORT(il2cpp_domain_get_assemblies);
 
 		il2cpp_domain = il2cpp_domain_get();
 	}

@@ -31,6 +31,9 @@
     <Filter Include="SQLiteCpp">
       <UniqueIdentifier>{ca98da5d-8570-4b5b-a944-1dd96f4ece89}</UniqueIdentifier>
     </Filter>
+    <Filter Include="doorstop">
+      <UniqueIdentifier>{6fbf18a2-11a5-4ad6-98e7-5a657f0a9394}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\il2cpp\il2cpp_symbols.hpp">
@@ -140,6 +143,15 @@
     <ClInclude Include="..\src\SQLiteCpp\VariadicBind.h">
       <Filter>SQLiteCpp</Filter>
     </ClInclude>
+    <ClInclude Include="il2cpp-tabledefs.h">
+      <Filter>il2cpp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\doorstop\ini.hpp">
+      <Filter>doorstop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\doorstop\mono.h">
+      <Filter>doorstop</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\console.cpp" />
@@ -206,11 +218,15 @@
     <ClCompile Include="..\src\implot\implot_items.cpp">
       <Filter>implot</Filter>
     </ClCompile>
+    <ClCompile Include="il2cpp_dump.cpp">
+      <Filter>il2cpp</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\src\dllproxy\version.def">
       <Filter>dllproxy</Filter>
     </None>
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <Masm Include="..\src\dllproxy\version.asm">

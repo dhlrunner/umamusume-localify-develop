@@ -1,5 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="packages\Microsoft.Windows.CppWinRT.2.0.220531.1\build\native\Microsoft.Windows.CppWinRT.props" Condition="Exists('packages\Microsoft.Windows.CppWinRT.2.0.220531.1\build\native\Microsoft.Windows.CppWinRT.props')" />
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
       <Configuration>Debug</Configuration>
@@ -68,7 +69,7 @@
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/std:c++latest /Zm1000 /utf-8 %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>..\src\PEDump\;..\src\lz4;..\src\;..\deps\rapidjson\include;..\deps\minhook\include\;..\src\cereal;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\src\PEDump\;..\src\lz4;..\src\;..\deps\rapidjson\include;..\deps\minhook\include\;..\src\ini\;..\src\cereal;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ExceptionHandling>Async</ExceptionHandling>
     </ClCompile>
     <Link>
@@ -77,6 +78,8 @@
       <ImportLibrary>bin\x64\Debug\version.lib</ImportLibrary>
       <ModuleDefinitionFile>../src/dllproxy/version.def</ModuleDefinitionFile>
       <AdditionalOptions>/SAFESEH:NO %(AdditionalOptions)</AdditionalOptions>
+      <ShowProgress>LinkVerbose</ShowProgress>
+      <ForceFileOutput>MultiplyDefinedSymbolOnly</ForceFileOutput>
     </Link>
     <PostBuildEvent>
       <Command>copy /y "$(TargetPath)" "D:\games\umamusume_custom\$(TargetFileName)"
@@ -109,6 +112,8 @@ copy /y "$(TargetPath)" "C:\Users\dhl\Umamusume\$(TargetFileName)"</Command>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\src\doorstop\ini.hpp" />
+    <ClInclude Include="..\src\doorstop\mono.h" />
     <ClInclude Include="..\src\httplib.h" />
     <ClInclude Include="..\src\il2cpp\il2cpp_symbols.hpp" />
     <ClInclude Include="..\src\imgui\backends\imgui_impl_dx11.h" />
@@ -148,6 +153,7 @@ copy /y "$(TargetPath)" "C:\Users\dhl\Umamusume\$(TargetFileName)"</Command>
     <ClInclude Include="..\src\stdinclude.hpp" />
     <ClInclude Include="..\src\string.hpp" />
     <ClInclude Include="..\src\url.hpp" />
+    <ClInclude Include="il2cpp-tabledefs.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\console.cpp" />
@@ -174,9 +180,11 @@ copy /y "$(TargetPath)" "C:\Users\dhl\Umamusume\$(TargetFileName)"</Command>
     <ClCompile Include="..\src\main.cpp" />
     <ClCompile Include="..\src\PEDump\PEDump.cpp" />
     <ClCompile Include="..\src\url.cpp" />
+    <ClCompile Include="il2cpp_dump.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\src\dllproxy\version.def" />
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <Masm Include="..\src\dllproxy\version.asm" />
@@ -189,5 +197,13 @@ copy /y "$(TargetPath)" "C:\Users\dhl\Umamusume\$(TargetFileName)"</Command>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
     <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.targets" />
+    <Import Project="packages\Microsoft.Windows.CppWinRT.2.0.220531.1\build\native\Microsoft.Windows.CppWinRT.targets" Condition="Exists('packages\Microsoft.Windows.CppWinRT.2.0.220531.1\build\native\Microsoft.Windows.CppWinRT.targets')" />
   </ImportGroup>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('packages\Microsoft.Windows.CppWinRT.2.0.220531.1\build\native\Microsoft.Windows.CppWinRT.props')" Text="$([System.String]::Format('$(ErrorText)', 'packages\Microsoft.Windows.CppWinRT.2.0.220531.1\build\native\Microsoft.Windows.CppWinRT.props'))" />
+    <Error Condition="!Exists('packages\Microsoft.Windows.CppWinRT.2.0.220531.1\build\native\Microsoft.Windows.CppWinRT.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\Microsoft.Windows.CppWinRT.2.0.220531.1\build\native\Microsoft.Windows.CppWinRT.targets'))" />
+  </Target>
 </Project>

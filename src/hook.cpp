@@ -711,7 +711,7 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 			swprintf_s(buf, L"umamusume_L (%d개 패치 적용됨)", patchCount);
 
 
-			
+			il2cpp_dump("il2cppdump");
 
 			/*RECT rect;
 			HDC wdc = GetWindowDC(currenthWnd);
@@ -733,6 +733,7 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 					//std::string exe_name = module_filename(NULL);
 					printf("Trying to dump GameAssembly.dll...\n");
 					pedump(ga, "dumped_GameAssembly.dll");
+					pedump(GetModuleHandle(L"umamusume.exe"), "dumped_umamusume.exe");
 				}
 				ga = nullptr;
 			}
@@ -3025,7 +3026,7 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 	void* GraphicSettings_GetVirtualResolution3D_orig;
 	Vector2_Int_t GraphicSettings_GetVirtualResolution3D_hook(void* _this, bool isForcedWideAspect) {
 		auto ret = reinterpret_cast<decltype(GraphicSettings_GetVirtualResolution3D_hook)*>(GraphicSettings_GetVirtualResolution3D_orig)(_this, isForcedWideAspect);
-		printf("GraphicSettings_GetVirtualResolution3D: %d, %d\n\n\n", ret.m_X, ret.m_Y);
+		//printf("GraphicSettings_GetVirtualResolution3D: %d, %d\n\n\n", ret.m_X, ret.m_Y);
 		if (!settingUpImageEffect && (g_sett->virtualResolutionMultiple != 1.0f)) {
 			ret.m_X *= g_sett->virtualResolutionMultiple;
 			ret.m_Y *= g_sett->virtualResolutionMultiple;
@@ -3036,7 +3037,7 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 	void* GraphicSettings_GetVirtualResolution_orig;
 	Vector2_t GraphicSettings_GetVirtualResolution_hook(void* _this) {
 		auto ret = reinterpret_cast<decltype(GraphicSettings_GetVirtualResolution_hook)*>(GraphicSettings_GetVirtualResolution_orig)(_this);
-		printf("GraphicSettings_GetVirtualResolution: %d, %d\n", ret.x, ret.y);
+		//printf("GraphicSettings_GetVirtualResolution: %d, %d\n", ret.x, ret.y);
 		if (g_sett->virtualResolutionMultiple != 1.0f) {
 			ret.x *= g_sett->virtualResolutionMultiple;
 			ret.y *= g_sett->virtualResolutionMultiple;
@@ -3047,7 +3048,7 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 	void* GraphicSettings_GetVirtualResolutionWidth3D_orig;
 	int GraphicSettings_GetVirtualResolutionWidth3D_hook(void* _this) {
 		auto ret = reinterpret_cast<decltype(GraphicSettings_GetVirtualResolutionWidth3D_hook)*>(GraphicSettings_GetVirtualResolutionWidth3D_orig)(_this);
-		printf("GraphicSettings_GetVirtualResolutionWidth3D: %d\n", ret);
+		//printf("GraphicSettings_GetVirtualResolutionWidth3D: %d\n", ret);
 		if (g_sett->virtualResolutionMultiple != 1.0f) {
 			ret *= g_sett->virtualResolutionMultiple;
 		}
@@ -3148,7 +3149,7 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 
 	void* IsIllegalUser_orig;
 	bool IsIllegalUser_hook() {
-		printf("IsIllegalUser hooked\n");
+		//printf("IsIllegalUser hooked\n");
 		return false;
 	}
 
@@ -5084,11 +5085,15 @@ HMODULE __stdcall load_library_w_hook(const wchar_t* path)
 
 void* GetModuleHandleW_orig = nullptr;
 HMODULE GetModuleHandleW_hook(LPCWSTR m_name) {
-	//MessageBox(0, L"GetModuleHandleW ", L"Title", MB_OK);
+	//MessageBox(0, L"GetModuleHandleW ", m_name, MB_OK);
 	//wprintf(L"GetModuleHandleW hooked. Modulename=%s\n", m_name);
 	if ((m_name != nullptr) &&
 		(m_name == L"version.dll"s)) {
 		return nullptr;
+	}
+	else if ((m_name != nullptr) &&
+		(m_name == L"winhttp.dll"s)) {
+			return nullptr;
 	}
 	return reinterpret_cast<decltype(GetModuleHandleW)*>(GetModuleHandleW_orig)(m_name);
 }
@@ -5108,6 +5113,11 @@ LONG WinVerifyTrust_hook(
 
 	if (path.contains(L"VERSION.dll")) {
 		
+		return 0;
+	}
+
+	if (path.contains(L"WINHTTP.dll")) {
+
 		return 0;
 	}
 
@@ -5161,6 +5171,108 @@ bool init_hook()
 			printf("Json Pass to another server enabled: %s:%d\n", g_sett->serverIP, g_sett->serverPort);
 			//printf("excuting %s\n", anotherprgname);
 			//ShellExecute(0, "open", "explorer", anotherprgname, 0, SW_HIDE);
+		}
+
+		//Read doorstop config
+		if (std::filesystem::exists("doorstop_config.ini")) {
+			printf("!Found doorstop config. loading mono environments..\n");
+			mINI::INIFile file("doorstop_config.ini");
+			mINI::INIStructure configIni;
+			file.read(configIni);
+
+			string& monoDLL = configIni["MonoBackend"]["runtimeLib"];
+			string& configDir = configIni["MonoBackend"]["configDir"];
+			string& coreDir = configIni["MonoBackend"]["corlibDir"];
+
+			string& doorstopDLL = configIni["UnityDoorstop"]["targetAssembly"];
+
+			const HMODULE monoModule = LoadLibraryW(wstring(monoDLL.begin(), monoDLL.end()).c_str());
+			if (!monoModule) {
+				printf("Failed to load mono assembly\n");
+			}
+			else {
+				load_mono_functions(monoModule);		
+				mono_set_dirs(coreDir.c_str(), configDir.c_str());
+				mono_set_assemblies_path(coreDir.c_str());
+				mono_config_parse(NULL);
+
+				void* domain = mono_jit_init_version("Doorstop Root Domain", NULL);
+				printf("Created domain: %p\n", domain);
+
+				mono_thread_set_main(mono_thread_current());
+
+				if (mono_domain_set_config) {
+#define CONFIG_EXT L".config"
+
+					wchar_t* exe_path = NULL;
+					const size_t real_len = get_module_path(NULL, &exe_path, NULL, STR_LEN(CONFIG_EXT));
+					wchar_t* folder_name = get_folder_name(exe_path, real_len, TRUE);
+					wmemcpy(exe_path + real_len, CONFIG_EXT, STR_LEN(CONFIG_EXT));
+
+					char* exe_path_n = narrow(exe_path);
+					char* folder_path_n = narrow(folder_name);
+
+					printf("Setting config paths: base dir: %s; config path: %s\n", folder_path_n, exe_path_n);
+
+					mono_domain_set_config(domain, folder_path_n, exe_path_n);
+
+					free(exe_path);
+					free(folder_name);
+					free(exe_path_n);
+					free(folder_path_n);
+
+#undef CONFIG_EXT
+				}
+
+				// Set target assembly as an environment variable for use in the managed world
+				SetEnvironmentVariableW(L"DOORSTOP_INVOKE_DLL_PATH", wstring(doorstopDLL.begin(), doorstopDLL.end()).c_str());
+
+				// Set path to managed folder dir as an env variable
+				string assembly_dir = string(mono_assembly_getrootdir());
+				printf("Assembly dir: %s\n", assembly_dir.c_str());
+
+				SetEnvironmentVariableW(L"DOORSTOP_MANAGED_FOLDER_DIR", wstring(assembly_dir.begin(), assembly_dir.end()).c_str());
+				//free(wide_assembly_dir);
+
+				wchar_t* app_path = NULL;
+				get_module_path(NULL, &app_path, NULL, 0);
+				SetEnvironmentVariableW(L"DOORSTOP_PROCESS_PATH", app_path);
+
+				void* assembly = mono_domain_assembly_open(domain, doorstopDLL.c_str());
+
+				if (assembly == NULL)
+					printf("Failed to load doorstop assembly\n");
+				else {
+					
+					void* image = mono_assembly_get_image(assembly);
+					void* desc = mono_method_desc_new("*:Main", FALSE);
+					void* method = mono_method_desc_search_in_image(desc, image);
+					void* signature = mono_method_signature(method);
+					UINT32 params = mono_signature_get_param_count(signature);
+
+					void** args = NULL;
+					if (params == 1) {
+						// If there is a parameter, it's most likely a string[].
+						void* args_array = mono_array_new(domain, mono_get_string_class(), 0);
+						args = (void**)malloc(sizeof(void*) * 1);
+						args[0] = args_array;
+					}
+
+					// Note: we use the runtime_invoke route since jit_exec will not work on DLLs
+					printf("Invoking method %p\n", method);
+					void* exc = NULL;
+					mono_runtime_invoke(method, NULL, args, &exc);
+
+					// cleanup method_desc
+					mono_method_desc_free(desc);
+
+					if (args != NULL) {
+						free(args);
+						args = NULL;
+					}
+
+				}
+			}
 		}
 	}
 	if (mh_inited)

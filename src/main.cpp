@@ -1878,9 +1878,9 @@ int __stdcall DllMain(HINSTANCE, DWORD reason, LPVOID)
 
 		
 		//MH_CreateHook((LPVOID)abort, abort_hook, &abort_orig);
-		//MH_EnableHook((LPVOID)abort);
+		//MH_EnableHook((LPVOID)abort);*/
 
-		//pedump(GetModuleHandleA("umamusume.exe"), "dumped_umamusume.exe");*/
+		
 
 		init_hook_early();
 
@@ -1889,6 +1889,8 @@ int __stdcall DllMain(HINSTANCE, DWORD reason, LPVOID)
 		);		
 
 		dicts = read_config();
+
+		
 
 		//MessageBox(0, L"Thread_init ", L"Title", MB_OK);
 		std::thread init_thread([&]() {
@@ -1912,6 +1914,8 @@ int __stdcall DllMain(HINSTANCE, DWORD reason, LPVOID)
 			printf("rpcinit=%d\n", rpc->init());
 			
 
+			
+
 			if (g_sett->enableConsole)
 				start_console();
 
@@ -1922,6 +1926,8 @@ int __stdcall DllMain(HINSTANCE, DWORD reason, LPVOID)
 		
 		DisableThreadLibraryCalls(hMod);
 		CreateThread(nullptr, 0, (LPTHREAD_START_ROUTINE)MainThread, hMod, 0, nullptr);
+
+
 
 		//MessageBox(0, L"End", L"Title", MB_OK);
 		//Load my plugins

@@ -72,9 +72,8 @@
 #include <deque>
 
 #include "kiero/kiero.h"
-
-#include "SQLiteCpp/SQLiteCpp.h"
-
+#include "doorstop/ini.hpp"
+#include "doorstop/mono.h"
 
 #pragma GCC diagnostic ignored "-Wdiv-by-zero"
 #pragma comment(lib, "d3d11.lib")
@@ -264,3 +263,5 @@ public:
 };
 
 extern discordRpc* rpc;
+
+extern void il2cpp_dump(const char* outDir);

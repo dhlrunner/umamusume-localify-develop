@@ -493,14 +493,6 @@ enum Il2CppTypeEnum
 	IL2CPP_TYPE_ENUM = 0x55
 };
 
-struct Il2CppClassHead
-{
-	const void* image;
-	void* gc_desc;
-	const char* name;
-	const char* namespaze;
-};
-
 typedef struct Il2CppType
 {
 	void* dummy;
@@ -510,6 +502,14 @@ typedef struct Il2CppType
 	unsigned int byref : 1;
 	unsigned int pinned : 1;
 } Il2CppType;
+
+struct Il2CppClassHead
+{
+	const void* image;
+	void* gc_desc;
+	const char* name;
+	const char* namespaze;
+};
 
 struct ParameterInfo
 {
@@ -539,9 +539,6 @@ typedef struct Il2CppArraySize
 	alignas(8)
 		void* vector[0];
 } Il2CppArraySize;
-
-
-
 
 
 struct Resolution_t
@@ -748,7 +745,14 @@ typedef struct Il2CppClass
 
 
 
-
+typedef struct PropertyInfo {
+	Il2CppClass* parent;
+	const char* name;
+	const MethodInfo* get;
+	const MethodInfo* set;
+	uint32_t attrs;
+	uint32_t token;
+} PropertyInfo;
 
 
 
@@ -1210,7 +1214,7 @@ typedef MethodInfo* (*il2cpp_class_get_methods_t)(Il2CppClass* klass, void** ite
 typedef MethodInfo* (*il2cpp_class_get_method_from_name_t)(void* klass, const char* name, int argsCount);
 typedef MethodInfo* (*il2cpp_property_get_get_method_t)(void* prop);
 typedef MethodInfo* (*il2cpp_property_get_set_method_t)(void* prop);
-typedef void* (*il2cpp_method_get_param_t)(const MethodInfo* method, uint32_t index);
+typedef Il2CppType* (*il2cpp_method_get_param_t)(const MethodInfo* method, uint32_t index);
 typedef Il2CppObject* (*il2cpp_object_new_t)(Il2CppClass* klass);
 typedef void* (*il2cpp_resolve_icall_t)(const char* name);
 typedef void* (*il2cpp_array_new_t)(Il2CppClass* klass, uintptr_t count);
@@ -1231,6 +1235,32 @@ typedef void (*il2cpp_runtime_object_init_t)(Il2CppObject* obj);
 
 typedef void* (*il2cpp_image_get_class_t)(void* image, size_t index);
 
+typedef const char* (*il2cpp_image_get_name_t)(void* image);
+typedef size_t(*il2cpp_image_get_class_count_t)(void* image);
+typedef bool (*il2cpp_type_is_byref_t)(const Il2CppType* type);
+typedef uint32_t(*il2cpp_method_get_flags_t)(const MethodInfo* mehod, uint32_t* iflags);
+typedef const Il2CppType* (*il2cpp_method_get_return_type_t)(const MethodInfo* method);
+typedef Il2CppClass* (*il2cpp_class_from_type_t)(const Il2CppType* type);
+typedef const char* (*il2cpp_class_get_name_t)(Il2CppClass* klass);
+typedef const PropertyInfo* (*il2cpp_class_get_properties_t)(Il2CppClass* klass, void** iter);
+typedef bool (*il2cpp_class_is_enum_t)(const Il2CppClass* klass);
+typedef FieldInfo* (*il2cpp_class_get_fields_t)(Il2CppClass* klass, void** iter);
+typedef const char* (*il2cpp_method_get_name_t)(const MethodInfo* method);
+typedef uint32_t(*il2cpp_method_get_param_count_t)(const MethodInfo* method);
+typedef const char* (*il2cpp_method_get_param_name_t)(const MethodInfo* method, uint32_t index);
+typedef Il2CppClass* (*il2cpp_class_get_parent_t)(Il2CppClass* klass);
+typedef Il2CppClass* (*il2cpp_class_get_interfaces_t)(Il2CppClass* klass, void** iter);
+typedef const char* (*il2cpp_class_get_namespace_t)(Il2CppClass* klass);
+typedef int (*il2cpp_class_get_flags_t)(const Il2CppClass* klass);
+typedef bool (*il2cpp_class_is_valuetype_t)(const Il2CppClass* klass);
+typedef uint32_t(*il2cpp_property_get_flags_t) (PropertyInfo* prop);
+typedef const char* (*il2cpp_property_get_name_t) (PropertyInfo* prop);
+typedef Il2CppClass* (*il2cpp_property_get_parent_t) (PropertyInfo* prop);
+typedef int (*il2cpp_field_get_flags_t)(FieldInfo* field);
+typedef const char* (*il2cpp_field_get_name_t)(FieldInfo* field);
+typedef Il2CppClass* (*il2cpp_field_get_parent_t)(FieldInfo* field);
+typedef size_t(*il2cpp_field_get_offset_t)(FieldInfo* field);
+typedef void** (*il2cpp_domain_get_assemblies_t)(void* domain, std::size_t* size);
 
 // function defines
 extern il2cpp_string_new_utf16_t il2cpp_string_new_utf16;
@@ -1264,6 +1294,35 @@ extern il2cpp_class_get_nested_types_t il2cpp_class_get_nested_types;
 extern il2cpp_image_get_class_t il2cpp_image_get_class;
 
 extern il2cpp_runtime_object_init_t il2cpp_runtime_object_init;
+
+extern il2cpp_image_get_name_t il2cpp_image_get_name;
+extern il2cpp_image_get_class_count_t il2cpp_image_get_class_count;
+extern il2cpp_type_is_byref_t il2cpp_type_is_byref;
+extern il2cpp_method_get_flags_t il2cpp_method_get_flags;
+extern il2cpp_method_get_return_type_t il2cpp_method_get_return_type;
+extern il2cpp_class_from_type_t il2cpp_class_from_type;
+extern il2cpp_class_get_name_t il2cpp_class_get_name;
+extern il2cpp_class_get_properties_t il2cpp_class_get_properties;
+extern il2cpp_class_is_enum_t il2cpp_class_is_enum;
+extern il2cpp_class_get_fields_t il2cpp_class_get_fields;
+extern il2cpp_method_get_name_t il2cpp_method_get_name;
+extern il2cpp_method_get_param_count_t il2cpp_method_get_param_count;
+extern il2cpp_method_get_param_name_t il2cpp_method_get_param_name;
+extern il2cpp_class_get_parent_t il2cpp_class_get_parent;
+extern il2cpp_class_get_interfaces_t il2cpp_class_get_interfaces;
+extern il2cpp_class_get_namespace_t il2cpp_class_get_namespace;
+extern il2cpp_class_get_flags_t il2cpp_class_get_flags;
+extern il2cpp_class_is_valuetype_t il2cpp_class_is_valuetype;
+extern il2cpp_property_get_flags_t il2cpp_property_get_flags;
+extern il2cpp_property_get_get_method_t il2cpp_property_get_get_method;
+extern il2cpp_property_get_set_method_t il2cpp_property_get_set_method;
+extern il2cpp_property_get_name_t il2cpp_property_get_name;
+extern il2cpp_property_get_parent_t il2cpp_property_get_parent;
+extern il2cpp_field_get_flags_t il2cpp_field_get_flags;
+extern il2cpp_field_get_name_t il2cpp_field_get_name;
+extern il2cpp_field_get_parent_t il2cpp_field_get_parent;
+extern il2cpp_field_get_offset_t il2cpp_field_get_offset;
+extern il2cpp_domain_get_assemblies_t il2cpp_domain_get_assemblies;
 
 char* il2cpp_array_addr_with_size(void* arr, int32_t size, uintptr_t idx);
 
